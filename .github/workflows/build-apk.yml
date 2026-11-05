@@ -25,38 +25,42 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
+    - name: Install Android NDK (Required for C++ CMake compilation)
+      uses: npxbr/setup-ndk@v1
+      with:
+        ndk-version: r25c
+
     - name: Install Dependencies
       run: |
         npm install
-        if [ -f "package.json" ]; then
-          npm run build --if-present || true
+
+    - name: Generate Android Native Project & Link C++ Core
+      run: |
+        # توليد هيكل أندرويد حقيقي من إعدادات Expo
+        npx expo prebuild --platform android --clean || npx react-native eject || true
+        
+        # التأكد من دمج ملفات C++ و Manifest الخاصة بك داخل المشروع
+        if [ -d "android/app/src/main" ]; then
+          mkdir -p android/app/src/main/cpp
+          cp CMakeLists.txt android/app/src/main/cpp/ 2>/dev/null || true
+          cp iron_core.cpp android/app/src/main/cpp/ 2>/dev/null || true
+          cp AndroidManifest.xml android/app/src/main/AndroidManifest.xml 2>/dev/null || true
         fi
 
-    - name: Build Android APK Package
+    - name: Build Debug APK via Gradle
       run: |
-        # التأكد من وجود هيكل أندرويد أو إنشائه لتجميع الملفات الأصلية
-        if [ ! -d "android" ]; then
-          echo "Creating standard android wrapper for C/C++ and React Native integration..."
-          npx react-native init TempApp --skip-install --template react-native-template-typescript || true
-          # نقل ملفات C++ مثل CMakeLists.txt و iron_core.cpp إلى مسار البناء المناسب إذا لزم الأمر
-        fi
-        
         if [ -d "android" ]; then
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
         else
-          echo "Simulating APK packaging for custom source files..."
-          mkdir -p output_apk
-          # تجميع أو ضغط الملفات الناتجة لضمان ظهورها في القطع الأثرية
-          zip -r output_apk/ironvault-debug.apk App.js CMakeLists.txt
+          echo "Android directory creation failed."
+          exit 1
         fi
 
-    - name: Upload APK Artifact
+    - name: Upload Valid APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: ironvault-apk
         path: |
-          **/build/outputs/apk/debug/*.apk
-          **/*.apk
-          output_apk/*.apk
+          android/app/build/outputs/apk/debug/*.apk
