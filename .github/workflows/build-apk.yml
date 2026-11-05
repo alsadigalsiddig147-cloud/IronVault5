@@ -30,7 +30,7 @@ jobs:
 
     - name: Robust Android Structure & C++ Integration
       run: |
-        npx react-native init IronVaultApp --version 0.73.2 --skip-install --yes || true
+        npx @react-native-community/cli init IronVaultApp --version 0.73.2 --skip-install || true
         if [ -d "IronVaultApp/android" ]; then
           cp -r IronVaultApp/android ./android
         fi
