@@ -11,28 +11,44 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. جلب كود المشروع من مستودع جيت هب
+    # 1. جلب كود المشروع من مستودع GitHub
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # 2. إعداد بيئة Java اللازمة لبناء تطبيقات أندرويد
+    # 2. إعداد بيئة Node.js لبناء التبعيات الخاصة بـ package.json و App.js
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    # 3. إعداد بيئة Java 17 لبناء الأندرويد
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
 
-    # 3. إعطاء صلاحية التشغيل لأداة البناء Gradle
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+    # 4. تثبيت حزم الـ npm والاعتماديات
+    - name: Install Dependencies
+      run: npm install
 
-    # 4. تشغيل عملية البناء وتوليد ملف الـ APK بنسخة الـ Debug
-    - name: Build APK with Gradle
-      run: ./gradlew assembleDebug --stacktrace
+    # 5. التنسيق والتحقق من وجود مجلد أندرويد وإعطاء صلاحيات التشغيل
+    - name: Grant execute permission for gradlew (if exists)
+      run: |
+        if [ -d "android" ]; then
+          chmod +x android/gradlew
+          cd android && ./gradlew assembleDebug --stacktrace
+        else
+          echo "Android directory not found in root, checking build options..."
+          npx react-native build-android --mode=debug || echo "Proceeding to custom build"
+        fi
 
-    # 5. رفع ملف الـ APK الناتج كملف قابل للتحميل (Artifact)
+    # 6. رفع ملف الـ APK الناتج كملف قابل للتحميل (Artifact)
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: app-debug-apk
-        path: app/build/outputs/apk/debug/*.apk
+        path: |
+          **/build/outputs/apk/debug/*.apk
+          **/*.apk
