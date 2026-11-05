@@ -28,24 +28,37 @@ jobs:
     - name: Install Dependencies
       run: npm install
 
-    - name: Configure Android & Build APK
+    - name: Robust Android Structure & C++ Integration
       run: |
-        # توليد مجلد أندرويد عبر إعدادات إكسبو مباشرة
-        npx expo prebuild --platform android --clean
-        
-        # التأكد من دمج ملفات C++ ومجلد المصدر في مكانها الصحيح للـ Gradle
-        if [ -f "CMakeLists.txt" ] && [ -d "android/app" ]; then
+        npx react-native init IronVaultApp --version 0.73.2 --skip-install --yes || true
+        if [ -d "IronVaultApp/android" ]; then
+          cp -r IronVaultApp/android ./android
+        fi
+        if [ -d "android/app" ]; then
           mkdir -p android/app/src/main/cpp
-          cp -f CMakeLists.txt android/app/src/main/cpp/
-          cp -f iron_core.cpp android/app/src/main/cpp/
+          cp -f CMakeLists.txt android/app/src/main/cpp/ 2>/dev/null || true
+          cp -f iron_core.cpp android/app/src/main/cpp/ 2>/dev/null || true
+          cp -f AndroidManifest.xml android/app/src/main/AndroidManifest.xml 2>/dev/null || true
+        else
+          echo "Error: Failed to establish base android directory."
+          exit 1
+        fi
+        BUILD_GRADLE="android/app/build.gradle"
+        if [ -f "$BUILD_GRADLE" ]; then
+          if ! grep -q "externalNativeBuild" "$BUILD_GRADLE"; then
+            echo "Injecting externalNativeBuild configurations..."
+            sed -i '/defaultConfig {/a \        externalNativeBuild {\n            cmake {\n                cppFlags ""\n            }\n        }' "$BUILD_GRADLE"
+            sed -i '/android {/a \    externalNativeBuild {\n        cmake {\n            path "src/main/cpp/CMakeLists.txt"\n            version "3.22.1"\n        }\n    }' "$BUILD_GRADLE"
+          fi
         fi
 
-        # تجميع ملف الـ APK بنجاح عبر Gradle
+    - name: Build Debug APK via Gradle
+      run: |
         cd android
         chmod +x gradlew
-        ./gradlew assembleDebug --stacktrace
+        ./gradlew assembleDebug --stacktrace --info
 
-    - name: Upload APK Artifact
+    - name: Upload Final APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: ironvault-apk
