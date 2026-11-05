@@ -28,22 +28,34 @@ jobs:
     - name: Install Dependencies
       run: npm install
 
-    - name: Generate Android Project & Build APK
+    - name: Create Stable Android Environment & Build APK
       run: |
-        # إنشاء هيكل أندرويد متوافق مع إعدادات المشروع
-        npx expo prebuild --platform android --clean || true
+        # إنشاء هيكل أندرويد حقيقي ونظيف بدون تفاعلات
+        npx react-native init IronVaultTemp --version 0.73.2 --skip-install --yes || true
         
-        # الانتقال لمجلد أندرويد وبناء الحزمة مباشرة
+        if [ -d "IronVaultTemp/android" ]; then
+          cp -r IronVaultTemp/android ./android
+        fi
+
+        # دمج ملفات C++ الخاصة بك (CMakeLists.txt و iron_core.cpp) داخل مجلد البناء
+        if [ -d "android/app" ]; then
+          mkdir -p android/app/src/main/cpp
+          cp -f CMakeLists.txt android/app/src/main/cpp/ 2>/dev/null || true
+          cp -f iron_core.cpp android/app/src/main/cpp/ 2>/dev/null || true
+          cp -f AndroidManifest.xml android/app/src/main/AndroidManifest.xml 2>/dev/null || true
+        fi
+
+        # بدء تجميع ملف الـ APK الحقيقي عبر Gradle
         if [ -d "android" ]; then
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
         else
-          echo "Android folder not found!"
+          echo "Error: Android directory missing!"
           exit 1
         fi
 
-    - name: Upload APK Artifact
+    - name: Upload Real APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: ironvault-apk
