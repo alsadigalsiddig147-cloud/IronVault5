@@ -25,42 +25,28 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Install Android NDK (Required for C++ CMake compilation)
-      uses: npxbr/setup-ndk@v1
-      with:
-        ndk-version: r25c
-
     - name: Install Dependencies
-      run: |
-        npm install
+      run: npm install
 
-    - name: Generate Android Native Project & Link C++ Core
+    - name: Generate Android Project & Build APK
       run: |
-        # توليد هيكل أندرويد حقيقي من إعدادات Expo
-        npx expo prebuild --platform android --clean || npx react-native eject || true
+        # إنشاء هيكل أندرويد متوافق مع إعدادات المشروع
+        npx expo prebuild --platform android --clean || true
         
-        # التأكد من دمج ملفات C++ و Manifest الخاصة بك داخل المشروع
-        if [ -d "android/app/src/main" ]; then
-          mkdir -p android/app/src/main/cpp
-          cp CMakeLists.txt android/app/src/main/cpp/ 2>/dev/null || true
-          cp iron_core.cpp android/app/src/main/cpp/ 2>/dev/null || true
-          cp AndroidManifest.xml android/app/src/main/AndroidManifest.xml 2>/dev/null || true
-        fi
-
-    - name: Build Debug APK via Gradle
-      run: |
+        # الانتقال لمجلد أندرويد وبناء الحزمة مباشرة
         if [ -d "android" ]; then
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
         else
-          echo "Android directory creation failed."
+          echo "Android folder not found!"
           exit 1
         fi
 
-    - name: Upload Valid APK Artifact
+    - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: ironvault-apk
         path: |
           android/app/build/outputs/apk/debug/*.apk
+          **/build/outputs/apk/debug/*.apk
