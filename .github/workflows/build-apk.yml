@@ -31,7 +31,24 @@ jobs:
           rm -rf android
           flutter create . --platforms=android --project-name iron_vault
 
-      # 2. ترتيب ملفات C++ و Kotlin (نقلها للمسار الصحيح تلقائياً)
+      # 2. إنشاء ملف init.gradle لإجبار جميع الإضافات على استخدام compileSdk 36
+      - name: Create Gradle Init Script
+        run: |
+          cat << 'EOF' > android/init.gradle
+          allprojects {
+              afterEvaluate { project ->
+                  if (project.extensions.findByName("android") != null) {
+                      def android = project.extensions.getByName("android")
+                      // Force all sub-projects (like file_picker) to compile against SDK 36
+                      if (android.hasProperty("compileSdkVersion")) {
+                          android.compileSdkVersion = 36
+                      }
+                  }
+              }
+          }
+          EOF
+
+      # 3. ترتيب ملفات C++ و Kotlin
       - name: Setup C++ and Kotlin Files
         run: |
           mkdir -p android/app/src/main/cpp
@@ -49,58 +66,7 @@ jobs:
           }
           EOF
 
-      # 3. إجبار جميع الإضافات على استخدام compileSdkVersion 36 (باستخدام Groovy DSL الآمن)
-      - name: Force compileSdk 36 via Groovy DSL
-        run: |
-          # إذا كان المشروع يستخدم Kotlin DSL، نقوم بتغيير اسم الملف ليعمل كـ Groovy
-          if [ -f "android/build.gradle.kts" ]; then
-            mv android/build.gradle.kts android/build.gradle
-          fi
-          
-          # إضافة الكود في بداية الملف لضمان تطبيقه قبل أي شيء آخر
-          cat << 'EOF' > android/build.gradle.tmp
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          
-          rootProject.layout.buildDirectory = file('../build')
-          subprojects {
-              project.layout.buildDirectory = rootProject.layout.buildDirectory.dir(project.name)
-          }
-          
-          // الإصلاح الجوهري: استخدام plugins.withId لضمان التوقيت الصحيح
-          subprojects { subproject ->
-              subproject.plugins.withId('com.android.library') {
-                  subproject.android {
-                      compileSdkVersion 36
-                  }
-              }
-              subproject.plugins.withId('com.android.application') {
-                  subproject.android {
-                      compileSdkVersion 36
-                  }
-              }
-          }
-          
-          tasks.register("clean", Delete) {
-              delete rootProject.layout.buildDirectory
-          }
-          EOF
-          
-          # دمج الكود الجديد مع أي كود قديم موجود (مثل جميع المستودعات)
-          if [ -f "android/build.gradle" ]; then
-            # إزالة الكود القديم الذي قد يتعارض
-            grep -v "allprojects" android/build.gradle | grep -v "rootProject.layout" | grep -v "subprojects" | grep -v "tasks.register" > android/build.gradle.old || true
-            cat android/build.gradle.old >> android/build.gradle.tmp
-            rm android/build.gradle.old
-          fi
-          
-          mv android/build.gradle.tmp android/build.gradle
-
-      # 4. ربط CMake بـ Gradle (بطريقة آمنة تدعم كلا الامتدادين)
+      # 4. ربط CMake بـ Gradle
       - name: Link CMake to Gradle
         run: |
           if [ -f "android/app/build.gradle.kts" ]; then
@@ -116,8 +82,9 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
+      # 5. بناء التطبيق باستخدام init.gradle لحل مشكلة الإصدارات
       - name: Build Standalone Debug APK
-        run: flutter build apk --debug
+        run: flutter build apk --debug --init-script=android/init.gradle
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
