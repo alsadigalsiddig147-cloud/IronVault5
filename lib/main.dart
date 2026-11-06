@@ -6,10 +6,13 @@ import 'dart:math';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:cryptography/cryptography.dart';
+import 'package:cryptography_flutter/cryptography_flutter.dart'; // ضروري لتفعيل المحرك الأصلي
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  FlutterCryptography.enable(); // تفعيل التشفير الأصلي للهاتف لمنع UnimplementedError
   runApp(const IronVaultApp());
 }
 
@@ -44,7 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedFilePath = '';
   String _selectedCarrierPath = '';
   bool _enableDoD = false; 
-  String _logText = '[*] Iron Vault Core V16.0 (Stable) Ready.\n';
+  String _logText = '[*] Iron Vault Core V18.0 (Stable) Ready.\n';
 
   RsaKeyPair? _rsaKeyPair;
   final _algorithm = AesGcm.with256bits();
@@ -314,7 +317,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _generateIdentityKeys() async {
     _addLog('[*] Generating RSA-4096 Key Pair...');
     try {
-      final rsa = RsaPss.sha256();
+      // استخدام RsaSsaPkcs1v15 بدلاً من RsaPss لضمان التوافق مع جميع الأجهزة
+      final rsa = RsaSsaPkcs1v15.sha256();
       _rsaKeyPair = await rsa.newKeyPair();
       _addLog('[✓] RSA-4096 Generated successfully.');
     } catch (e) {
@@ -337,10 +341,10 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       _addLog('[*] Bundling and Encrypting Identity with Password...');
       
-      // إصلاح جذري: استخراج المعامل الخاص (d) والمفتاح العام
-      final RsaKeyPairData rsaData = await _rsaKeyPair!.extract();
-      final rsaPrivBytes = rsaData.d; 
-      final rsaPubString = rsaData.publicKey.toString();
+      // استخراج المفتاح الخاص باستخدام الدالة الصحيحة
+      final rsaPrivBytes = await _rsaKeyPair!.extractPrivateKeyBytes();
+      final rsaPub = await _rsaKeyPair!.extractPublicKey();
+      final rsaPubString = rsaPub.toString();
 
       final bundle = {
         'type': 'RSA-4096',
@@ -408,7 +412,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('🛡️ IronVault V16 (Military Grade)', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 14)),
+        title: const Text('🛡️ IronVault V18 (Military Grade)', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 14)),
         backgroundColor: const Color(0xFF111418),
         centerTitle: true,
       ),
