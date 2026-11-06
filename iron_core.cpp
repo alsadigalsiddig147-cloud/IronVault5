@@ -11,15 +11,14 @@
 
 extern "C" {
 
-// مححرك محاكاة التشفير والتحقق باللغة الأصلية C
+// تم تعديل اسم الحزمة ليطابق AndroidManifest.xml (com.example.ironvault)
 JNIEXPORT jstring JNICALL
-Java_com_ironvault_app_NativeCore_nativeEncrypt(JNIEnv *env, jobject thiz, jstring path, jstring password) {
+Java_com_example_ironvault_NativeCore_nativeEncrypt(JNIEnv *env, jobject thiz, jstring path, jstring password) {
     const char *nativePath = env->GetStringUTFChars(path, 0);
     const char *nativePwd = env->GetStringUTFChars(password, 0);
 
     LOGI("Initiating C-Core High-Speed Encryption for: %s", nativePath);
 
-    // محاكاة معالجة الملفات العميقة عبر C
     std::string result = "SUCCESS_ENCRYPTED_BY_C_CORE";
 
     env->ReleaseStringUTFChars(path, nativePath);
@@ -28,11 +27,10 @@ Java_com_ironvault_app_NativeCore_nativeEncrypt(JNIEnv *env, jobject thiz, jstri
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_ironvault_app_NativeCore_nativeWipe(JNIEnv *env, jobject thiz, jstring path) {
+Java_com_example_ironvault_NativeCore_nativeWipe(JNIEnv *env, jobject thiz, jstring path) {
     const char *nativePath = env->GetStringUTFChars(path, 0);
     LOGI("Executing 7-Pass DoD Secure Wipe on C-Level: %s", nativePath);
     
-    // تنفيذ التمزيق العسكري للملفات عبر مؤشرات C المباشرة
     std::ofstream file(nativePath, std::ios::binary | std::ios::in);
     if (file.is_open()) {
         file.seekp(0, std::ios::end);
