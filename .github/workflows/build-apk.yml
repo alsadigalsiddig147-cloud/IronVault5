@@ -29,17 +29,24 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
-      - name: Add Permissions to AndroidManifest
+      - name: Ensure Android Directory Exists & Add Permissions
         run: |
+          # إذا لم يكن مجلد أندرويد موجوداً، قم بتوليده تلقائياً
+          if [ ! -d "android" ]; then
+            flutter create . --org com.ironvault --project-name iron_vault --platforms android
+          fi
+
           MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
           if [ -f "$MANIFEST_PATH" ]; then
-            # التأكد من عدم تكرار الصلاحيات وإضافتها بشكل امن
             if ! grep -q "READ_EXTERNAL_STORAGE" "$MANIFEST_PATH"; then
               sed -i '/<application/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>' "$MANIFEST_PATH"
             fi
           fi
-          # رفع الحد الأدنى للـ SDK
-          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
+
+          GRADLE_PATH="android/app/build.gradle"
+          if [ -f "$GRADLE_PATH" ]; then
+            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' "$GRADLE_PATH"
+          fi
 
       - name: Build Standalone Debug APK
         run: flutter build apk --debug
