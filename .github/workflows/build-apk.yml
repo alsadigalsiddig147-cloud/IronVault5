@@ -26,55 +26,10 @@ jobs:
         channel: 'stable'
         flutter-version: '3.19.x'
 
-    - name: Initialize Project, Permissions & Gradle Fix
+    - name: Get Dependencies and Build APK
       run: |
-        # التأكد من وجود ملف pubspec.yaml بالاعتماديات الكاملة
-        if [ ! -f "pubspec.yaml" ]; then
-          cat << 'EOF' > pubspec.yaml
-        name: iron_vault
-        description: "Iron Vault Hybrid - C++ Engine with Flutter"
-        publish_to: 'none'
-        version: 1.0.0+1
-
-        environment:
-          sdk: '>=3.0.0 <4.0.0'
-
-        dependencies:
-          flutter:
-            sdk: flutter
-          ffi: ^2.1.0
-          path_provider: ^2.1.1
-          file_picker: ^8.0.0
-
-        dev_dependencies:
-          flutter_test:
-            sdk: flutter
-          flutter_lints: ^3.0.0
-
-        flutter:
-          uses-material-design: true
-        EOF
-        fi
-
-        # تهيئة هيكل فلوتار وأندرويد نظيف ومتوافق
-        rm -rf android
-        flutter create . --org com.ironvault --project-name iron_vault --platforms android
-
-        # إضافة صلاحيات التخزين وقراءة الملفات الحيوية إلى AndroidManifest.xml
-        MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
-        if [ -f "$MANIFEST_PATH" ]; then
-          # إدراج الصلاحيات قبل وسم application مباشرة
-          sed -i '/<application/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>' "$MANIFEST_PATH"
-        fi
-
-        # رفع minSdkVersion إلى 21 لتوافق الحزم
-        sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
-
-    - name: Get Flutter Dependencies
-      run: flutter pub get
-
-    - name: Build Standalone Debug APK
-      run: flutter build apk --debug
+        flutter pub get
+        flutter build apk --debug --no-pub
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
