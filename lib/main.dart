@@ -43,11 +43,12 @@ class _HomeScreenState extends State<HomeScreen> {
   
   String _selectedFilePath = '';
   String _selectedCarrierPath = '';
-  String _selectedKeyType = 'RSA-4096';
   bool _enableDoD = false; 
-  String _logText = '[*] Iron Vault Core V10.3 Ready.\n';
+  String _logText = '[*] Iron Vault Core V10.4 Ready.\n';
 
-  KeyPair? _generatedKeyPair;
+  // استخدام SimpleKeyPair لحل مشكلة أخطاء الأنواع
+  SimpleKeyPair? _rsaKeyPair;
+  SimpleKeyPair? _eccKeyPair;
 
   final _algorithm = AesGcm.with256bits();
   static const _platform = MethodChannel('com.ironvault.app/native');
@@ -304,20 +305,21 @@ class _HomeScreenState extends State<HomeScreen> {
     return -1;
   }
 
-  // --- قسم إدارة الهويات (تم الإصلاح النهائي) ---
+  // --- قسم إدارة الهويات (المنطق الجديد المطلوب) ---
   
   Future<void> _generateIdentityKeys() async {
-    _addLog('[*] Generating high-security $_selectedKeyType Identity Keys...');
+    _addLog('[*] Step 1: Generating RSA-4096 Key Pair...');
     try {
-      if (_selectedKeyType == 'RSA-4096') {
-        final rsa = RsaPss.sha256();
-        _generatedKeyPair = await rsa.newKeyPair();
-        _addLog('[✓] RSA-4096 Keys Generated in memory.');
-      } else {
-        final ecc = Ecdsa.p256(Sha256());
-        _generatedKeyPair = await ecc.newKeyPair();
-        _addLog('[✓] ECC (Curves) Keys Generated in memory.');
-      }
+      final rsa = RsaPss.sha256();
+      _rsaKeyPair = await rsa.newKeyPair();
+      _addLog('[✓] RSA-4096 Generated.');
+
+      _addLog('[*] Step 2: Generating ECC Key Pair...');
+      final ecc = Ecdsa.p256(Sha256());
+      _eccKeyPair = await ecc.newKeyPair();
+      _addLog('[✓] ECC Generated.');
+
+      _addLog('[✓] Hybrid Keys ready to be bundled and encrypted.');
     } catch (e) {
       _addLog('[-] Key Generation Failed: $e');
     }
@@ -325,51 +327,57 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _exportIdentity() async {
     if (_identityPasswordController.text.isEmpty) {
-      _addLog('[-] Error: Password required to export identity.');
+      _addLog('[-] Error: Enter password to encrypt your identity keys.');
       return;
     }
-    if (_generatedKeyPair == null) {
-      _addLog('[-] Error: Generate keys first before exporting.');
+    if (_rsaKeyPair == null || _eccKeyPair == null) {
+      _addLog('[-] Error: Generate keys first.');
       return;
     }
 
     await _requestStoragePermission();
 
     try {
-      _addLog('[*] Encrypting and Exporting Identity Bundle...');
-      Map<String, dynamic> bundle = {};
-
-      // استخدام extract() للحصول على KeyPairData الذي يحتوي على المفاتيح
-      final keyPairData = await _generatedKeyPair!.extract();
+      _addLog('[*] Step 3: Bundling and Encrypting Identity with Password...');
       
-      // keyPairData هو من نوع KeyPairData، والـ publicKey فيه من نوع SimplePublicKey
-      // SimplePublicKey يمتلك خاصية bytes
-      bundle['type'] = _selectedKeyType;
-      bundle['public'] = base64Encode(keyPairData.publicKey.bytes);
-      bundle['private'] = base64Encode(keyPairData.privateKeyBytes);
+      // استخراج المفاتيح بشكل صحيح
+      final rsaPub = await _rsaKeyPair!.extractPublicKey();
+      final rsaPriv = await _rsaKeyPair!.extractPrivateKeyBytes();
+      
+      final eccPub = await _eccKeyPair!.extractPublicKey();
+      final eccPriv = await _eccKeyPair!.extractPrivateKeyBytes();
+
+      // تجميع المفاتيح في كائن JSON
+      final bundle = {
+        'type': 'HYBRID_RSA_ECC',
+        'rsa_public': base64Encode(rsaPub.bytes),
+        'rsa_private': base64Encode(rsaPriv),
+        'ecc_public': base64Encode(eccPub.bytes),
+        'ecc_private': base64Encode(eccPriv),
+        'timestamp': DateTime.now().toIso8601String(),
+      };
 
       final jsonStr = jsonEncode(bundle);
-      final vaultDir = await _getIronVaultDirectory();
-      final randomName = _generateRandomName();
-      final savePath = p.join(vaultDir.path, '$randomName.iron');
-
-      // تشفير البيانات وحفظها
+      
+      // تشفير المفاتيح بكلمة مرور المستخدم
       final salt = _algorithm.newNonce();
       final secretKey = await _deriveKey(_identityPasswordController.text, salt);
       final encryptedBundle = await _algorithm.encrypt(utf8.encode(jsonStr), secretKey: secretKey);
-
+      
+      // حفظ الملف المشفر
+      final vaultDir = await _getIronVaultDirectory();
+      final randomName = _generateRandomName();
+      final savePath = p.join(vaultDir.path, '$randomName.iron');
+      
       final finalFile = File(savePath);
       final sink = finalFile.openWrite();
-      sink.add(salt);
-      sink.add(encryptedBundle.concatenation());
+      sink.add(salt); // كتابة الـ Salt (12 بايت)
+      sink.add(encryptedBundle.concatenation()); // كتابة المفاتيح المشفرة
       await sink.close();
 
       _addLog('[✓] Identity Exported & Encrypted to: $randomName.iron');
+      _addLog('[*] You can now use this file to encrypt files securely.');
       
-      if (_enableDoD) {
-         _addLog('[✓] DoD Wipe executed for temporary identity traces.');
-      }
-
     } catch (e) {
       _addLog('[-] Export Error: $e');
     }
@@ -401,7 +409,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
       _addLog('[✓] Identity Decrypted Successfully!');
       _addLog('[+] Type: ${decodedJson['type']}');
-      _addLog('[+] Public Key Loaded (${decodedJson['public'].length} bytes)');
+      _addLog('[+] RSA Key loaded (${decodedJson['rsa_public'].length} bytes)');
+      _addLog('[+] ECC Key loaded (${decodedJson['ecc_public'].length} bytes)');
       
     } catch (e) {
       _addLog('[-] Import Error: Wrong password or corrupted file.');
@@ -532,32 +541,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildIdentityManagerTab() {
     return ListView(
       children: [
-        const Text('توليد مفاتيح الهوية:', style: TextStyle(color: Colors.white70, fontSize: 12)),
-        const SizedBox(height: 5),
-        DropdownButtonFormField<String>(
-          value: _selectedKeyType,
-          dropdownColor: const Color(0xFF1A1F26),
-          items: ['RSA-4096', 'ECC (Curves)']
-              .map((t) => DropdownMenuItem(value: t, child: Text(t, style: const TextStyle(color: Colors.white))))
-              .toList(),
-          onChanged: (v) {
-            setState(() => _selectedKeyType = v!);
-            _addLog('[*] Selected Key Type: $v');
-          },
-          decoration: InputDecoration(
-            filled: true, 
-            fillColor: const Color(0xFF1A1F26), 
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6))
-          ),
-        ),
+        const Text('توليد الهوية الهجينة (RSA-4096 + ECC):', style: TextStyle(color: Colors.white70, fontSize: 12)),
         const SizedBox(height: 10),
         ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
           onPressed: _generateIdentityKeys,
-          child: const Text('⚡ توليد الهوية', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          child: const Text('⚡ 1. توليد المفاتيح', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         ),
         const Divider(height: 25, color: Colors.grey),
-        const Text('كلمة مرور حماية الهوية (للتصدير/الاستيراد):', style: TextStyle(color: Colors.white70, fontSize: 12)),
+        const Text('كلمة مرور تغليف وحماية الهوية:', style: TextStyle(color: Colors.white70, fontSize: 12)),
         const SizedBox(height: 5),
         _buildPasswordField(_identityPasswordController, 'كلمة مرور الهوية'),
         const SizedBox(height: 10),
@@ -568,7 +560,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: OutlinedButton(
                 onPressed: _exportIdentity,
-                child: const Text('📤 تصدير مشفر', style: TextStyle(color: Color(0xFFD4AF37))),
+                child: const Text('📤 2. تصدير مشفر', style: TextStyle(color: Color(0xFFD4AF37))),
               ),
             ),
             const SizedBox(width: 5),
