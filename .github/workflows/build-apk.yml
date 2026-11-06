@@ -25,25 +25,20 @@ jobs:
         with:
           channel: 'stable'
 
-      # 1. مسح مجلد الأندرويد القديم وإنشاء واحد جديد وسليم
+      # 1. إنشاء مشروع أندرويد قياسي
       - name: Recreate Standard Android Project
         run: |
           rm -rf android
           flutter create . --platforms=android --project-name iron_vault
 
-      # 2. ترتيب ملفات C++ ونقلها للمكان الصحيح تلقائياً
+      # 2. ترتيب ملفات C++ و Kotlin
       - name: Setup C++ and Kotlin Files
         run: |
-          # إنشاء مجلد cpp في المكان الصحيح
           mkdir -p android/app/src/main/cpp
-          
-          # إذا كان مجلد cpp موجوداً في الجذر، انقله للمكان الصحيح
           if [ -d "cpp" ]; then
             cp -r cpp/* android/app/src/main/cpp/
             rm -rf cpp
           fi
-          
-          # إنشاء ملف NativeCore.kt تلقائياً لضمان عدم حدوث أخطاء
           mkdir -p android/app/src/main/kotlin/com/example/ironvault
           echo 'package com.example.ironvault' > android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
           echo 'object NativeCore {' >> android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
@@ -52,11 +47,20 @@ jobs:
           echo '    external fun nativeWipe(path: String): Boolean' >> android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
           echo '}' >> android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
 
-      # 3. ربط CMake بـ Gradle تلقائياً
+      # 3. ربط CMake بـ Gradle (يدعم .gradle و .gradle.kts)
       - name: Link CMake to Gradle
         run: |
-          if ! grep -q "externalNativeBuild" android/app/build.gradle; then
-            sed -i '/android {/a \    externalNativeBuild {\n        cmake {\n            path "src/main/cpp/CMakeLists.txt"\n        }\n    }' android/app/build.gradle
+          if [ -f "android/app/build.gradle.kts" ]; then
+            if ! grep -q "externalNativeBuild" android/app/build.gradle.kts; then
+              sed -i '/android {/a \    externalNativeBuild {\n        cmake {\n            path = file("src/main/cpp/CMakeLists.txt")\n        }\n    }' android/app/build.gradle.kts
+            fi
+          elif [ -f "android/app/build.gradle" ]; then
+            if ! grep -q "externalNativeBuild" android/app/build.gradle; then
+              sed -i '/android {/a \    externalNativeBuild {\n        cmake {\n            path "src/main/cpp/CMakeLists.txt"\n        }\n    }' android/app/build.gradle
+            fi
+          else
+            echo "Error: Neither build.gradle nor build.gradle.kts found!"
+            exit 1
           fi
 
       - name: Get Dependencies
