@@ -101,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return await pbkdf2.deriveKeyFromPassword(password: password, nonce: salt);
   }
 
-  // --- قسم تشفير الملفات (يدعم الملفات الكبيرة عبر التدفق) ---
+  // --- قسم تشفير الملفات ---
   Future<void> _encryptFile() async {
     if (_selectedFilePath.isEmpty || _passwordController.text.isEmpty) {
       _addLog('[-] Error: File or password missing.');
@@ -112,7 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final file = File(_selectedFilePath);
       final fileSize = await file.length();
-      final isLargeFile = fileSize > 500 * 1024 * 1024; // 500 MB
+      final isLargeFile = fileSize > 500 * 1024 * 1024;
 
       if (isLargeFile) {
         _addLog('[*] Large File (>500MB) Detected. Enabling Smart Streaming Mode...');
@@ -144,7 +144,6 @@ class _HomeScreenState extends State<HomeScreen> {
       sink.add(fileNonce);
       Mac? fileMac;
 
-      // التشفير التدفقي (يقرأ الملف على شكل قطع صغيرة 64KB)
       final encryptedStream = _algorithm.encryptStream(
         file.openRead(),
         secretKey: secretKey,
@@ -226,7 +225,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final savePath = p.join(vaultDir.path, 'RESTORED_$originalName');
       final outputFile = File(savePath);
 
-      // فك التشفير التدفقي (لا يستهلك ذاكرة)
       final decryptedStream = _algorithm.decryptStream(
         file.openRead(dataStart, dataEnd),
         secretKey: secretKey,
@@ -348,9 +346,9 @@ class _HomeScreenState extends State<HomeScreen> {
       // Extract returns KeyPairData
       final KeyPairData rsaData = await _rsaKeyPair!.extract();
       
-      // Convert RSA keys to strings for safe JSON serialization
+      // Fix: Use privateKeyBytes instead of privateKey
       final String rsaPubString = rsaData.publicKey.toString();
-      final String rsaPrivString = rsaData.privateKey.toString();
+      final String rsaPrivString = base64Encode(rsaData.privateKeyBytes);
 
       final bundle = {
         'type': 'RSA-4096',
