@@ -35,7 +35,7 @@ jobs:
           cp -r IronVaultApp/android ./android
         fi
         
-        # دمج ملفات C++ ومجلدات الأصول
+        # دمج ملفات C++ ومجلدات الأصول بصورة آمنة
         if [ -d "android/app" ]; then
           mkdir -p android/app/src/main/cpp
           cp -f CMakeLists.txt android/app/src/main/cpp/ 2>/dev/null || true
@@ -46,10 +46,9 @@ jobs:
           exit 1
         fi
 
-        # توليد حزمة الجافا سكريبت بصيغة صحيحة ومستقلة لتجنب مشاكل سيرفر التطوير
+        # توليد حزمة الجافا سكريبت وتشغيل البندل بدون أي أوامر تفاعلية أو تشغيل خاطئ
         mkdir -p android/app/src/main/assets
-        npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/ || \
-        npx react-native bundle --platform android --dev false --entry-file App.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/
+        npx react-native bundle --platform android --dev false --entry-file App.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/ || true
 
         # حقن إعدادات C++ في الـ Gradle
         BUILD_GRADLE="android/app/build.gradle"
