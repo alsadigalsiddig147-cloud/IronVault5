@@ -44,9 +44,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedFilePath = '';
   String _selectedCarrierPath = '';
   bool _enableDoD = false; 
-  String _logText = '[*] Iron Vault Core V13.0 Ready.\n';
+  String _logText = '[*] Iron Vault Core V14.0 (Stable Release) Ready.\n';
 
-  // استخدام RsaKeyPair لحل مشكلة privateKeyBytes
   RsaKeyPair? _rsaKeyPair;
 
   final _algorithm = AesGcm.with256bits();
@@ -344,11 +343,15 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       _addLog('[*] Bundling and Encrypting Identity with Password...');
       
-      // الحل الجذري: استخدام extractPrivateKeyBytes مباشرة من RsaKeyPair
-      final rsaPrivBytes = await _rsaKeyPair!.extractPrivateKeyBytes();
+      // الحل: استخدم extract() للحصول على RsaKeyPairData ثم المكونات
+      final RsaKeyPairData rsaData = await _rsaKeyPair!.extract();
       
-      // استخراج المفتاح العام وتحويله إلى نص
-      final rsaPub = await _rsaKeyPair!.extractPublicKey();
+      // المفتاح الخاص في RSA يتم تمثيله بالمعامل d (وغالباً p, q, dp, dq, qinv)
+      // يمكننا تحويل d إلى base64 لتخزينه
+      final rsaPrivBytes = rsaData.d; 
+      
+      // المفتاح العام
+      final rsaPub = rsaData.publicKey;
       final rsaPubString = rsaPub.toString();
 
       final bundle = {
@@ -418,7 +421,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('🛡️ IronVault V13 (Military Grade)', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 14)),
+        title: const Text('🛡️ IronVault V14 (Military Grade)', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 14)),
         backgroundColor: const Color(0xFF111418),
         centerTitle: true,
       ),
