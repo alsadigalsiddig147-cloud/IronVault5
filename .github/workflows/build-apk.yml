@@ -26,6 +26,18 @@ jobs:
         channel: 'stable'
         flutter-version: '3.19.x'
 
+    - name: Create Clean Flutter Project Structure
+      run: |
+        # إنشاء مشروع فلوتار مؤقت لتوليد ملفات أندرويد القياسية
+        flutter create temp_app --org com.ironvault --project-name iron_vault --platforms android
+        
+        # نقل ملفات أندرويد المتكاملة إلى جذر مشروعنا الحالي
+        cp -r temp_app/android ./
+        
+        # نسخ ملف الواجهة الرئيسي الذي أنشأناه
+        mkdir -p lib
+        # (إذا كان ملف main.dart موجوداً مسبقاً في lib سيتم الاحتفاظ به)
+
     - name: Get Flutter Dependencies
       run: flutter pub get
 
