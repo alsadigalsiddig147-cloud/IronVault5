@@ -56,7 +56,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<Directory> _getIronVaultDirectory() async {
-    // المسار المباشر لمجلد التنزيلات في الأندرويد
     Directory downloadsDir = Directory('/storage/emulated/0/Download');
     if (!await downloadsDir.exists()) {
       downloadsDir = Directory('/storage/emulated/0/Downloads');
@@ -79,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // محرك التشفير التدفقي الذكي (للتعامل مع الملفات الكبيرة)
+  // محرك التشفير التدفقي المصحح
   Future<void> _processFileEncryption() async {
     if (_selectedFilePath.isEmpty) {
       _addLog('[-] Error: Please select a target file first.');
@@ -94,50 +93,53 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       _addLog('[*] Initializing AES-256-GCM Encryption (Stream Mode)...');
-      _addLog('[*] File processing started. Please wait...');
       
       final file = File(_selectedFilePath);
-      final fileSize = await file.length();
-      
-      // تحويل حجم الملف إلى ميجابايت للعرض في السجل
-      final sizeInMB = (fileSize / (1024 * 1024)).toStringAsFixed(2);
-      _addLog('[*] Target File Size: $sizeInMB MB');
-
       final vaultDir = await _getIronVaultDirectory();
       final fileName = p.basename(_selectedFilePath);
       final savePath = p.join(vaultDir.path, '$fileName.ironvault');
       final outputFile = File(savePath);
 
-      // اشتقاق المفتاح السري من كلمة المرور
-      final pbkdf2 = Pbkdf2(
-        macAlgorithm: Hmac.sha256(),
-        iterations: 100000,
-        bits: 256,
-      );
+      // اشتقاق المفتاح السري
+      final pbkdf2 = Pbkdf2(macAlgorithm: Hmac.sha256(), iterations: 100000, bits: 256);
       final secretKey = await pbkdf2.deriveKeyFromPassword(
         password: _passwordController.text,
-        nonce: List<int>.generate(16, (i) => i), // ملح ثابت
+        nonce: List<int>.generate(16, (i) => i),
       );
 
-      // فتح الملف كتيار (Stream) للقراءة والكتابة
+      // توليد Nonce عشوائي (ضروري لخوارزمية GCM)
+      final nonce = _algorithm.newNonce();
+      
       final inputStream = file.openRead();
       final sink = outputFile.openWrite();
 
-      // التشفير المتدفق: يقرأ قطع صغيرة (64KB) ويشفرها ويكتبها ثم يحررها من الذاكرة
+      // كتابة الـ Nonce في بداية الملف لكي نستخدمه عند فك التشفير
+      await sink.add(nonce);
+
+      // تشفير متدفق
       final encryptedStream = _algorithm.encryptStream(
         inputStream,
         secretKey: secretKey,
+        nonce: nonce, // تم إضافة المعامل المطلوب
       );
 
-      // ربط التدفق المشفر بملف الإخراج
-      await sink.addStream(encryptedStream);
+      SecretBox? lastBox;
+
+      // قراءة البيانات المشفرة قطعة تلو الأخرى وكتابتها
+      await for (final box in encryptedStream) {
+        await sink.add(box.cipherText);
+        lastBox = box; // الاحتفاظ بآخر قطعة للحصول على MAC (بصمة التحقق)
+      }
+
+      // كتابة بصمة التحقق (MAC) في نهاية الملف
+      if (lastBox != null) {
+        await sink.add(lastBox.mac.bytes);
+      }
+
       await sink.close();
 
       _addLog('[✓] File Encrypted successfully using Stream!');
       _addLog('Saved to: $savePath');
-
-      // ملاحظة: كود C++ للتمزيق جاهز، يمكنك تفعيله لاحقاً عند ربط FFI
-      // NativeCore.nativeWipe(_selectedFilePath);
 
     } catch (e) {
       _addLog('[-] Encryption Error: $e');
@@ -164,8 +166,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final vaultDir = await _getIronVaultDirectory();
     final identityFile = File(p.join(vaultDir.path, 'IronVault_Identity.ironid'));
     
-    // حفظ الهوية (تم إصلاح الخطأ هنا)
-    await identityFile.writeAsString('SIMULATED_ENCRYPTED_IDENTITY_${publicKey.encode().length}');
+    // تم إصلاح الخطأ هنا باستخدام modulus بدلاً من encode
+    await identityFile.writeAsString('SIMULATED_ENCRYPTED_IDENTITY_${publicKey.modulus.toString().length}');
     
     _addLog('[✓] Encrypted Identity exported to: ${identityFile.path}');
   }
