@@ -44,9 +44,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedFilePath = '';
   String _selectedCarrierPath = '';
   bool _enableDoD = false; 
-  String _logText = '[*] Iron Vault Core V10.7 (RSA Only) Ready.\n';
+  String _logText = '[*] Iron Vault Core V10.8 (RSA Only) Ready.\n';
 
-  // استخدام KeyPair الأساسي لاستقبال المفتاح
   KeyPair? _rsaKeyPair;
 
   final _algorithm = AesGcm.with256bits();
@@ -308,7 +307,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return -1;
   }
 
-  // --- قسم إدارة الهويات (RSA فقط) ---
+  // --- قسم إدارة الهويات (تم إصلاح الخطأ) ---
   
   Future<void> _generateIdentityKeys() async {
     _addLog('[*] Generating RSA-4096 Key Pair...');
@@ -336,16 +335,13 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       _addLog('[*] Bundling and Encrypting Identity with Password...');
       
-      // استخراج البيانات بشكل آمن
-      final rsaData = await _rsaKeyPair!.extract();
-      
-      // استخراج المفتاح الخاص بالطريقة الصحيحة
-      final rsaPrivBytes = (rsaData.privateKey as SimplePrivateKey).bytes;
-      
-      // استخراج المفتاح العام (مع التحقق من النوع)
-      List<int> rsaPubBytes = rsaData.publicKey is SimplePublicKey 
-          ? (rsaData.publicKey as SimplePublicKey).bytes 
-          : utf8.encode(rsaData.publicKey.toString());
+      // الحل الجذري: تحويل النوع إلى RsaKeyPairData لكي يتعرف على الخصائص
+      final RsaKeyPair rsaKey = _rsaKeyPair as RsaKeyPair;
+      final RsaKeyPairData rsaData = await rsaKey.extract();
+
+      // الآن يمكننا الوصول إلى المفاتيح بدون أي أخطاء
+      final rsaPrivBytes = rsaData.privateKeyBytes;
+      final rsaPubBytes = rsaData.publicKey.bytes;
 
       final bundle = {
         'type': 'RSA-4096',
