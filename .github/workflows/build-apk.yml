@@ -25,60 +25,77 @@ jobs:
         with:
           channel: 'stable'
 
-      # 1. إنشاء مشروع أندرويد قياسي ونظيف
+      # 1. إنشاء مشروع أندرويد قياسي ونظيف لضمان وجود ملفات Gradle
       - name: Recreate Standard Android Project
         run: |
           rm -rf android
           flutter create . --platforms=android --project-name iron_vault
 
-      # 2. إنشاء ملفات C++ و Kotlin مباشرة لضمان عدم ضياعها
+      # 2. توليد محرك C++ (المحدث للتعامل مع الملفات الكبيرة) وملفات Kotlin
       - name: Generate C++ and Kotlin Files
         run: |
           mkdir -p android/app/src/main/cpp
           
+          # إنشاء ملف CMakeLists.txt
           cat > android/app/src/main/cpp/CMakeLists.txt << 'EOF'
-          cmake_minimum_required(VERSION 3.4.1)
+          cmake_minimum_required(VERSION 3.22.1)
           project("iron_core")
           add_library(iron_core SHARED iron_core.cpp)
           find_library(log-lib log)
           target_link_libraries(iron_core ${log-lib})
           EOF
           
+          # إنشاء ملف iron_core.cpp (النسخة الذكية للتمزيق التدفقي)
           cat > android/app/src/main/cpp/iron_core.cpp << 'EOF'
           #include <jni.h>
           #include <string>
           #include <vector>
           #include <fstream>
           #include <android/log.h>
+          #include <algorithm>
 
           #define LOG_TAG "IronVaultCore"
           #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 
           extern "C" {
-          JNIEXPORT jboolean JNICALL
-          Java_com_example_ironvault_NativeCore_nativeWipe(JNIEnv *env, jobject thiz, jstring path) {
-              const char *nativePath = env->GetStringUTFChars(path, 0);
-              LOGI("Executing DoD 5220.22-M Secure Wipe: %s", nativePath);
-              std::ofstream file(nativePath, std::ios::binary | std::ios::in | std::ios::out);
-              if (file.is_open()) {
-                  file.seekp(0, std::ios::end);
-                  size_t size = file.tellp();
-                  file.seekp(0, std::ios::beg);
-                  for (int pass = 0; pass < 3; ++pass) {
-                      std::vector<char> buffer(size, pass == 0 ? 0x00 : (pass == 1 ? 0xFF : 0x55));
-                      file.write(buffer.data(), size);
-                      file.flush();
-                      file.seekp(0, std::ios::beg);
+              JNIEXPORT jboolean JNICALL
+              Java_com_example_ironvault_NativeCore_nativeWipe(JNIEnv *env, jobject thiz, jstring path) {
+                  const char *nativePath = env->GetStringUTFChars(path, 0);
+                  LOGI("Executing DoD 5220.22-M Secure Wipe: %s", nativePath);
+                  
+                  std::fstream file(nativePath, std::ios::binary | std::ios::in | std::ios::out);
+                  if (file.is_open()) {
+                      file.seekg(0, std::ios::end);
+                      std::streamsize fileSize = file.tellg();
+                      file.seekg(0, std::ios::beg);
+
+                      const std::streamsize CHUNK_SIZE = 64 * 1024; 
+                      std::vector<char> buffer(CHUNK_SIZE);
+
+                      for (int pass = 0; pass < 3; ++pass) {
+                          char fillChar = (pass == 0) ? 0x00 : ((pass == 1) ? 0xFF : 0x55);
+                          std::fill(buffer.begin(), buffer.end(), fillChar);
+                          
+                          file.seekp(0, std::ios::beg);
+                          std::streamsize remaining = fileSize;
+                          
+                          while (remaining > 0) {
+                              std::streamsize to_write = std::min(CHUNK_SIZE, remaining);
+                              file.write(buffer.data(), to_write);
+                              remaining -= to_write;
+                          }
+                          file.flush();
+                      }
+                      file.close();
+                      std::remove(nativePath);
                   }
-                  file.close();
-                  std::remove(nativePath);
+                  env->ReleaseStringUTFChars(path, nativePath);
+                  return JNI_TRUE;
               }
-              env->ReleaseStringUTFChars(path, nativePath);
-              return JNI_TRUE;
-          }
           }
           EOF
 
+          # إنشاء جسر Kotlin
           mkdir -p android/app/src/main/kotlin/com/example/ironvault
           cat > android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt << 'EOF'
           package com.example.ironvault
@@ -88,24 +105,58 @@ jobs:
           }
           EOF
 
+      # 3. جلب المكتبات
       - name: Get Dependencies
         run: flutter pub get
 
-      - name: Link CMake to Gradle
+      # 4. إصلاح توافق الإصدارات وربط CMake تلقائياً
+      - name: Patch Gradle and Link CMake
         run: |
-          if [ -f "android/app/build.gradle.kts" ]; then
-            if ! grep -q "externalNativeBuild" android/app/build.gradle.kts; then
-              sed -i '/android {/a \    externalNativeBuild {\n        cmake {\n            path = file("src/main/cpp/CMakeLists.txt")\n        }\n    }' android/app/build.gradle.kts
-            fi
-          elif [ -f "android/app/build.gradle" ]; then
-            if ! grep -q "externalNativeBuild" android/app/build.gradle; then
-              sed -i '/android {/a \    externalNativeBuild {\n        cmake {\n            path "src/main/cpp/CMakeLists.txt"\n        }\n    }' android/app/build.gradle
+          APP_GRADLE=""
+          if [ -f "android/app/build.gradle.kts" ]; then APP_GRADLE="android/app/build.gradle.kts"; 
+          elif [ -f "android/app/build.gradle" ]; then APP_GRADLE="android/app/build.gradle"; fi
+
+          if [ -n "$APP_GRADLE" ]; then
+            echo "Patching $APP_GRADLE..."
+            # إجبار compileSdk على الإصدار 36
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' "$APP_GRADLE"
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' "$APP_GRADLE"
+            sed -i 's/compileSdkVersion 34/compileSdkVersion 36/g' "$APP_GRADLE"
+            
+            # ربط CMake
+            if ! grep -q "externalNativeBuild" "$APP_GRADLE"; then
+              if [[ "$APP_GRADLE" == *.kts ]]; then
+                sed -i '/android {/a \    externalNativeBuild {\n        cmake {\n            path = file("src/main/cpp/CMakeLists.txt")\n        }\n    }' "$APP_GRADLE"
+              else
+                sed -i '/android {/a \    externalNativeBuild {\n        cmake {\n            path "src/main/cpp/CMakeLists.txt"\n        }\n    }' "$APP_GRADLE"
+              fi
             fi
           fi
 
+          # إجبار كل الإضافات الفرعية على استخدام SDK 36
+          ROOT_GRADLE="android/build.gradle"
+          if [ -f "$ROOT_GRADLE" ]; then
+            if ! grep -q "subprojects {" "$ROOT_GRADLE"; then
+              cat << 'EOF' >> "$ROOT_GRADLE"
+
+          subprojects {
+              afterEvaluate { project ->
+                  if (project.hasProperty('android')) {
+                      project.android {
+                          compileSdkVersion = 36
+                      }
+                  }
+              }
+          }
+          EOF
+            fi
+          fi
+
+      # 5. بناء التطبيق النهائي
       - name: Build Standalone Debug APK
         run: flutter build apk --debug
 
+      # 6. رفع ملف الـ APK
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
