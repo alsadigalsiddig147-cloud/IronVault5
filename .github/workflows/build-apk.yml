@@ -25,19 +25,32 @@ jobs:
         with:
           channel: 'stable'
 
-      # 1. إنشاء مشروع Flutter قياسي في مجلد مؤقت (هذا يحل مشكلة Gradle)
-      - name: Create Standard Flutter Project
-        run: flutter create .temp_flutter_project
-
-      # 2. نسخ ملفات Android القياسية (Gradle, etc.) إلى مشروعك
-      - name: Copy Standard Android Files
+      # 1. مسح مجلد الأندرويد القديم وإنشاء واحد جديد وسليم
+      - name: Recreate Standard Android Project
         run: |
           rm -rf android
-          cp -r .temp_flutter_project/android .
-          # استعادة ملفات C++ التي أنشأناها
+          flutter create . --platforms=android --project-name iron_vault
+
+      # 2. ترتيب ملفات C++ ونقلها للمكان الصحيح تلقائياً
+      - name: Setup C++ and Kotlin Files
+        run: |
+          # إنشاء مجلد cpp في المكان الصحيح
           mkdir -p android/app/src/main/cpp
-          # (ملاحظة: الملفات التي رفعتها على GitHub موجودة بالفعل في مستودعك)
-          # لكننا تأكدنا من وجود المجلد
+          
+          # إذا كان مجلد cpp موجوداً في الجذر، انقله للمكان الصحيح
+          if [ -d "cpp" ]; then
+            cp -r cpp/* android/app/src/main/cpp/
+            rm -rf cpp
+          fi
+          
+          # إنشاء ملف NativeCore.kt تلقائياً لضمان عدم حدوث أخطاء
+          mkdir -p android/app/src/main/kotlin/com/example/ironvault
+          echo 'package com.example.ironvault' > android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
+          echo 'object NativeCore {' >> android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
+          echo '    init { System.loadLibrary("iron_core") }' >> android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
+          echo '    external fun nativeEncrypt(path: String, password: String): String' >> android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
+          echo '    external fun nativeWipe(path: String): Boolean' >> android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
+          echo '}' >> android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
 
       # 3. ربط CMake بـ Gradle تلقائياً
       - name: Link CMake to Gradle
