@@ -44,9 +44,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedFilePath = '';
   String _selectedCarrierPath = '';
   bool _enableDoD = false; 
-  String _logText = '[*] Iron Vault Core V10.5 Ready.\n';
+  String _logText = '[*] Iron Vault Core V10.6 Ready.\n';
 
-  // استخدام KeyPair الأساسي لحل مشكلة الأنواع
+  // استخدام KeyPair الأساسي لاستقبال كلا النوعين
   KeyPair? _rsaKeyPair;
   KeyPair? _eccKeyPair;
 
@@ -57,8 +57,8 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _logText += '\n$msg';
       final lines = _logText.split('\n');
-      if (lines.length > 15) {
-        _logText = lines.sublist(lines.length - 15).join('\n');
+      if (lines.length > 12) {
+        _logText = lines.sublist(lines.length - 12).join('\n');
       }
     });
   }
@@ -87,10 +87,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _secureWipe(String path) async {
     if (!_enableDoD) return;
     try {
-      await _platform.invokeMethod('nativeWipe', {'path': path});
-      _addLog('[✓] Original file securely wiped (DoD 7-Pass).');
+      // استدعاء دالة C++ عبر القناة
+      final result = await _platform.invokeMethod('nativeWipe', {'path': path});
+      if (result == true) {
+        _addLog('[✓] Original file securely wiped (DoD 7-Pass).');
+      } else {
+        _addLog('[-] DoD Wipe failed: C++ returned false.');
+      }
     } catch (e) {
-      _addLog('[-] Wipe failed: $e');
+      _addLog('[-] DoD Wipe failed: $e');
     }
   }
 
@@ -311,12 +316,12 @@ class _HomeScreenState extends State<HomeScreen> {
     _addLog('[*] Step 1: Generating RSA-4096 Key Pair...');
     try {
       final rsa = RsaPss.sha256();
-      _rsaKeyPair = await rsa.newKeyPair(); // الآن يتوافق مع KeyPair
+      _rsaKeyPair = await rsa.newKeyPair();
       _addLog('[✓] RSA-4096 Generated.');
 
       _addLog('[*] Step 2: Generating ECC Key Pair...');
       final ecc = Ecdsa.p256(Sha256());
-      _eccKeyPair = await ecc.newKeyPair(); // الآن يتوافق مع KeyPair
+      _eccKeyPair = await ecc.newKeyPair();
       _addLog('[✓] ECC Generated.');
 
       _addLog('[✓] Hybrid Keys ready to be bundled and encrypted.');
@@ -340,11 +345,11 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       _addLog('[*] Step 3: Bundling and Encrypting Identity with Password...');
       
-      // استخراج البيانات بشكل آمن باستخدام extract()
+      // استخدام extract() للحصول على KeyPairData
       final rsaData = await _rsaKeyPair!.extract();
       final eccData = await _eccKeyPair!.extract();
 
-      // استخراج البايتات العامة (التعامل مع SimplePublicKey فقط لتجنب الأخطاء)
+      // التعامل مع SimplePublicKey بشكل آمن
       List<int> rsaPubBytes = rsaData.publicKey is SimplePublicKey 
           ? (rsaData.publicKey as SimplePublicKey).bytes 
           : utf8.encode(rsaData.publicKey.toString());
@@ -353,7 +358,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ? (eccData.publicKey as SimplePublicKey).bytes 
           : utf8.encode(eccData.publicKey.toString());
 
-      // تجميع المفاتيح في كائن JSON
       final bundle = {
         'type': 'HYBRID_RSA_ECC',
         'rsa_public': base64Encode(rsaPubBytes),
@@ -365,20 +369,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final jsonStr = jsonEncode(bundle);
       
-      // تشفير المفاتيح بكلمة مرور المستخدم
       final salt = _algorithm.newNonce();
       final secretKey = await _deriveKey(_identityPasswordController.text, salt);
       final encryptedBundle = await _algorithm.encrypt(utf8.encode(jsonStr), secretKey: secretKey);
       
-      // حفظ الملف المشفر
       final vaultDir = await _getIronVaultDirectory();
       final randomName = _generateRandomName();
       final savePath = p.join(vaultDir.path, '$randomName.iron');
       
       final finalFile = File(savePath);
       final sink = finalFile.openWrite();
-      sink.add(salt); // كتابة الـ Salt (12 بايت)
-      sink.add(encryptedBundle.concatenation()); // كتابة المفاتيح المشفرة
+      sink.add(salt); 
+      sink.add(encryptedBundle.concatenation()); 
       await sink.close();
 
       _addLog('[✓] Identity Exported & Encrypted to: $randomName.iron');
@@ -434,7 +436,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Column(
         children: [
           Container(
-            height: 130,
+            height: 120,
             margin: const EdgeInsets.all(8),
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
