@@ -31,13 +31,11 @@ jobs:
           rm -rf android
           flutter create . --platforms=android --project-name iron_vault
 
-      # 2. إنشاء ملفات C++ و Kotlin مباشرة (الحل الجذري للمشكلة)
+      # 2. إنشاء ملفات C++ و Kotlin مباشرة لضمان عدم ضياعها
       - name: Generate C++ and Kotlin Files
         run: |
-          # إنشاء مجلد cpp
           mkdir -p android/app/src/main/cpp
           
-          # كتابة ملف CMakeLists.txt
           cat > android/app/src/main/cpp/CMakeLists.txt << 'EOF'
           cmake_minimum_required(VERSION 3.4.1)
           project("iron_core")
@@ -46,42 +44,32 @@ jobs:
           target_link_libraries(iron_core ${log-lib})
           EOF
           
-          # كتابة ملف iron_core.cpp
           cat > android/app/src/main/cpp/iron_core.cpp << 'EOF'
           #include <jni.h>
           #include <string>
           #include <vector>
           #include <fstream>
-          #include <sstream>
           #include <android/log.h>
 
           #define LOG_TAG "IronVaultCore"
           #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-          #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
           extern "C" {
-          JNIEXPORT jstring JNICALL
-          Java_com_example_ironvault_NativeCore_nativeEncrypt(JNIEnv *env, jobject thiz, jstring path, jstring password) {
-              const char *nativePath = env->GetStringUTFChars(path, 0);
-              const char *nativePwd = env->GetStringUTFChars(password, 0);
-              LOGI("Initiating C-Core High-Speed Encryption for: %s", nativePath);
-              std::string result = "SUCCESS_ENCRYPTED_BY_C_CORE";
-              env->ReleaseStringUTFChars(path, nativePath);
-              env->ReleaseStringUTFChars(password, nativePwd);
-              return env->NewStringUTF(result.c_str());
-          }
-
           JNIEXPORT jboolean JNICALL
           Java_com_example_ironvault_NativeCore_nativeWipe(JNIEnv *env, jobject thiz, jstring path) {
               const char *nativePath = env->GetStringUTFChars(path, 0);
-              LOGI("Executing 7-Pass DoD Secure Wipe on C-Level: %s", nativePath);
-              std::ofstream file(nativePath, std::ios::binary | std::ios::in);
+              LOGI("Executing DoD 5220.22-M Secure Wipe: %s", nativePath);
+              std::ofstream file(nativePath, std::ios::binary | std::ios::in | std::ios::out);
               if (file.is_open()) {
                   file.seekp(0, std::ios::end);
                   size_t size = file.tellp();
                   file.seekp(0, std::ios::beg);
-                  std::vector<char> zeros(size, 0xFF);
-                  file.write(zeros.data(), size);
+                  for (int pass = 0; pass < 3; ++pass) {
+                      std::vector<char> buffer(size, pass == 0 ? 0x00 : (pass == 1 ? 0xFF : 0x55));
+                      file.write(buffer.data(), size);
+                      file.flush();
+                      file.seekp(0, std::ios::beg);
+                  }
                   file.close();
                   std::remove(nativePath);
               }
@@ -91,13 +79,11 @@ jobs:
           }
           EOF
 
-          # إنشاء ملف NativeCore.kt
           mkdir -p android/app/src/main/kotlin/com/example/ironvault
           cat > android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt << 'EOF'
           package com.example.ironvault
           object NativeCore {
               init { System.loadLibrary("iron_core") }
-              external fun nativeEncrypt(path: String, password: String): String
               external fun nativeWipe(path: String): Boolean
           }
           EOF
@@ -105,7 +91,6 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
-      # 3. ربط CMake بـ Gradle
       - name: Link CMake to Gradle
         run: |
           if [ -f "android/app/build.gradle.kts" ]; then
@@ -118,7 +103,6 @@ jobs:
             fi
           fi
 
-      # 4. بناء التطبيق
       - name: Build Standalone Debug APK
         run: flutter build apk --debug
 
