@@ -148,6 +148,7 @@ jobs:
           }
           EOF
 
+      # الحل: إجبار جميع الإضافات على استخدام SDK 37
       - name: Patch Gradle and Link CMake
         run: |
           APP_GRADLE=""
@@ -166,6 +167,24 @@ jobs:
               else
                 sed -i '/android {/a \    externalNativeBuild {\n        cmake {\n            path "src/main/cpp/CMakeLists.txt"\n        }\n    }' "$APP_GRADLE"
               fi
+            fi
+          fi
+
+          ROOT_GRADLE="android/build.gradle"
+          if [ -f "$ROOT_GRADLE" ]; then
+            if ! grep -q "subprojects {" "$ROOT_GRADLE"; then
+              cat << 'EOF' >> "$ROOT_GRADLE"
+
+          subprojects {
+              afterEvaluate { project ->
+                  if (project.hasProperty('android')) {
+                      project.android {
+                          compileSdkVersion = 37
+                      }
+                  }
+              }
+          }
+          EOF
             fi
           fi
 
