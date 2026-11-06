@@ -45,11 +45,10 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedCarrierPath = '';
   String _selectedKeyType = 'RSA-4096';
   bool _enableDoD = false; 
-  String _logText = '[*] Iron Vault Core V10.1 Ready.\n';
+  String _logText = '[*] Iron Vault Core V10.2 Ready.\n';
 
-  // لحفظ المفاتيح المولدة في الذاكرة حتى يتم تصديرها
-  SimpleKeyPair? _generatedRsaKeyPair;
-  SimpleKeyPair? _generatedEccKeyPair;
+  // حفظ المفاتيح باستخدام النوع الأساسي KeyPair لتجنب أخطاء الأنواع
+  KeyPair? _generatedKeyPair;
 
   final _algorithm = AesGcm.with256bits();
   static const _platform = MethodChannel('com.ironvault.app/native');
@@ -57,7 +56,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void _addLog(String msg) {
     setState(() {
       _logText += '\n$msg';
-      // الاحتفاظ بآخر 15 سطر فقط في السجل لتجنب الامتلاء
       final lines = _logText.split('\n');
       if (lines.length > 15) {
         _logText = lines.sublist(lines.length - 15).join('\n');
@@ -307,20 +305,18 @@ class _HomeScreenState extends State<HomeScreen> {
     return -1;
   }
 
-  // --- قسم إدارة الهويات (تم إصلاحه وربطه بالكامل) ---
+  // --- قسم إدارة الهويات (تم إصلاح الأخطاء البرمجية) ---
   
   Future<void> _generateIdentityKeys() async {
     _addLog('[*] Generating high-security $_selectedKeyType Identity Keys...');
     try {
       if (_selectedKeyType == 'RSA-4096') {
         final rsa = RsaPss.sha256();
-        _generatedRsaKeyPair = await rsa.newKeyPair();
-        _generatedEccKeyPair = null;
+        _generatedKeyPair = await rsa.newKeyPair();
         _addLog('[✓] RSA-4096 Keys Generated in memory.');
       } else {
         final ecc = Ecdsa.p256(Sha256());
-        _generatedEccKeyPair = await ecc.newKeyPair();
-        _generatedRsaKeyPair = null;
+        _generatedKeyPair = await ecc.newKeyPair();
         _addLog('[✓] ECC (Curves) Keys Generated in memory.');
       }
     } catch (e) {
@@ -333,7 +329,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _addLog('[-] Error: Password required to export identity.');
       return;
     }
-    if (_generatedRsaKeyPair == null && _generatedEccKeyPair == null) {
+    if (_generatedKeyPair == null) {
       _addLog('[-] Error: Generate keys first before exporting.');
       return;
     }
@@ -344,19 +340,14 @@ class _HomeScreenState extends State<HomeScreen> {
       _addLog('[*] Encrypting and Exporting Identity Bundle...');
       Map<String, dynamic> bundle = {};
 
-      if (_generatedRsaKeyPair != null) {
-        final pub = await _generatedRsaKeyPair!.extractPublicKey();
-        final priv = await _generatedRsaKeyPair!.extractPrivateKey();
-        bundle['type'] = 'RSA-4096';
-        bundle['public'] = base64Encode(pub.bytes);
-        bundle['private'] = base64Encode(await priv.extractBytes());
-      } else if (_generatedEccKeyPair != null) {
-        final pub = await _generatedEccKeyPair!.extractPublicKey();
-        final priv = await _generatedEccKeyPair!.extractPrivateKey();
-        bundle['type'] = 'ECC';
-        bundle['public'] = base64Encode(pub.bytes);
-        bundle['private'] = base64Encode(await priv.extractBytes());
-      }
+      // استخراج المفتاح العام
+      final publicKey = await _generatedKeyPair!.extractPublicKey();
+      // استخراج المفتاح الخاص باستخدام الدالة الصحيحة extractPrivateKeyBytes
+      final privateKeyBytes = await _generatedKeyPair!.extractPrivateKeyBytes();
+
+      bundle['type'] = _selectedKeyType;
+      bundle['public'] = base64Encode(publicKey.bytes);
+      bundle['private'] = base64Encode(privateKeyBytes);
 
       final jsonStr = jsonEncode(bundle);
       final vaultDir = await _getIronVaultDirectory();
@@ -539,7 +530,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // الواجهة المطابقة للصورة الثانية
   Widget _buildIdentityManagerTab() {
     return ListView(
       children: [
@@ -572,7 +562,7 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(height: 5),
         _buildPasswordField(_identityPasswordController, 'كلمة مرور الهوية'),
         const SizedBox(height: 10),
-        _buildDoDSwitch(), // تم إضافة مفتاح DoD هنا
+        _buildDoDSwitch(),
         const SizedBox(height: 10),
         Row(
           children: [
