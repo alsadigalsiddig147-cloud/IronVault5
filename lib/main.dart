@@ -46,7 +46,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _enableDoD = false; 
   String _logText = '[*] Iron Vault Core V10.4 Ready.\n';
 
-  // استخدام SimpleKeyPair لحل مشكلة أخطاء الأنواع
   SimpleKeyPair? _rsaKeyPair;
   SimpleKeyPair? _eccKeyPair;
 
@@ -202,7 +201,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final originalName = jsonDecode(utf8.decode(decryptedHeader))['name'];
 
       final fileNonce = await raf.read(12);
-      final macLength = 16;
+      const macLength = 16;
       
       final dataStart = stegoOffset + 12 + 4 + headerLength + 12;
       final dataEnd = totalLength - macLength;
@@ -305,7 +304,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return -1;
   }
 
-  // --- قسم إدارة الهويات (المنطق الجديد المطلوب) ---
+  // --- قسم إدارة الهويات (تم تصحيح الأخطاء البرمجية وأنواع البيانات) ---
   
   Future<void> _generateIdentityKeys() async {
     _addLog('[*] Step 1: Generating RSA-4096 Key Pair...');
@@ -340,11 +339,11 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       _addLog('[*] Step 3: Bundling and Encrypting Identity with Password...');
       
-      // استخراج المفاتيح بشكل صحيح
-      final rsaPub = await _rsaKeyPair!.extractPublicKey();
+      // تصحيح الأخطاء عبر تحويل المفتاح العام صراحة إلى SimplePublicKey للوصول إلى bytes
+      final rsaPub = await _rsaKeyPair!.extractPublicKey() as SimplePublicKey;
       final rsaPriv = await _rsaKeyPair!.extractPrivateKeyBytes();
       
-      final eccPub = await _eccKeyPair!.extractPublicKey();
+      final eccPub = await _eccKeyPair!.extractPublicKey() as SimplePublicKey;
       final eccPriv = await _eccKeyPair!.extractPrivateKeyBytes();
 
       // تجميع المفاتيح في كائن JSON
@@ -371,8 +370,8 @@ class _HomeScreenState extends State<HomeScreen> {
       
       final finalFile = File(savePath);
       final sink = finalFile.openWrite();
-      sink.add(salt); // كتابة الـ Salt (12 بايت)
-      sink.add(encryptedBundle.concatenation()); // كتابة المفاتيح المشفرة
+      sink.add(salt); 
+      sink.add(encryptedBundle.concatenation()); 
       await sink.close();
 
       _addLog('[✓] Identity Exported & Encrypted to: $randomName.iron');
@@ -409,8 +408,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
       _addLog('[✓] Identity Decrypted Successfully!');
       _addLog('[+] Type: ${decodedJson['type']}');
-      _addLog('[+] RSA Key loaded (${decodedJson['rsa_public'].length} bytes)');
-      _addLog('[+] ECC Key loaded (${decodedJson['ecc_public'].length} bytes)');
+      _addLog('[+] RSA Key loaded (${(decodedJson['rsa_public'] as String).length} bytes base64)');
+      _addLog('[+] ECC Key loaded (${(decodedJson['ecc_public'] as String).length} bytes base64)');
       
     } catch (e) {
       _addLog('[-] Import Error: Wrong password or corrupted file.');
