@@ -25,33 +25,13 @@ jobs:
         with:
           channel: 'stable'
 
-      # 1. إنشاء مشروع أندرويد قياسي
+      # 1. إنشاء مشروع أندرويد قياسي ونظيف
       - name: Recreate Standard Android Project
         run: |
           rm -rf android
           flutter create . --platforms=android --project-name iron_vault
 
-      # 2. إجبار جميع الإضافات على استخدام compileSdkVersion 36 (مع تصحيح بناء جملة Kotlin DSL)
-      - name: Force compileSdkVersion 36 for all subprojects
-        run: |
-          # إضافة سطر الاستيراد في أعلى الملف
-          sed -i '1i import com.android.build.gradle.BaseExtension' android/build.gradle.kts
-          
-          # إضافة كود إجبار الإصدار في نهاية الملف
-          cat << 'EOF' >> android/build.gradle.kts
-
-          subprojects {
-              afterEvaluate {
-                  if (plugins.hasPlugin("com.android.application") || plugins.hasPlugin("com.android.library")) {
-                      extensions.findByType<com.android.build.gradle.BaseExtension>()?.apply {
-                          compileSdkVersion(36)
-                      }
-                  }
-              }
-          }
-          EOF
-
-      # 3. ترتيب ملفات C++ و Kotlin
+      # 2. ترتيب ملفات C++ و Kotlin (نقلها للمسار الصحيح تلقائياً)
       - name: Setup C++ and Kotlin Files
         run: |
           mkdir -p android/app/src/main/cpp
@@ -60,14 +40,67 @@ jobs:
             rm -rf cpp
           fi
           mkdir -p android/app/src/main/kotlin/com/example/ironvault
-          echo 'package com.example.ironvault' > android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
-          echo 'object NativeCore {' >> android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
-          echo '    init { System.loadLibrary("iron_core") }' >> android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
-          echo '    external fun nativeEncrypt(path: String, password: String): String' >> android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
-          echo '    external fun nativeWipe(path: String): Boolean' >> android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
-          echo '}' >> android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
+          cat > android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt << 'EOF'
+          package com.example.ironvault
+          object NativeCore {
+              init { System.loadLibrary("iron_core") }
+              external fun nativeEncrypt(path: String, password: String): String
+              external fun nativeWipe(path: String): Boolean
+          }
+          EOF
 
-      # 4. ربط CMake بـ Gradle
+      # 3. إجبار جميع الإضافات على استخدام compileSdkVersion 36 (باستخدام Groovy DSL الآمن)
+      - name: Force compileSdk 36 via Groovy DSL
+        run: |
+          # إذا كان المشروع يستخدم Kotlin DSL، نقوم بتغيير اسم الملف ليعمل كـ Groovy
+          if [ -f "android/build.gradle.kts" ]; then
+            mv android/build.gradle.kts android/build.gradle
+          fi
+          
+          # إضافة الكود في بداية الملف لضمان تطبيقه قبل أي شيء آخر
+          cat << 'EOF' > android/build.gradle.tmp
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          
+          rootProject.layout.buildDirectory = file('../build')
+          subprojects {
+              project.layout.buildDirectory = rootProject.layout.buildDirectory.dir(project.name)
+          }
+          
+          // الإصلاح الجوهري: استخدام plugins.withId لضمان التوقيت الصحيح
+          subprojects { subproject ->
+              subproject.plugins.withId('com.android.library') {
+                  subproject.android {
+                      compileSdkVersion 36
+                  }
+              }
+              subproject.plugins.withId('com.android.application') {
+                  subproject.android {
+                      compileSdkVersion 36
+                  }
+              }
+          }
+          
+          tasks.register("clean", Delete) {
+              delete rootProject.layout.buildDirectory
+          }
+          EOF
+          
+          # دمج الكود الجديد مع أي كود قديم موجود (مثل جميع المستودعات)
+          if [ -f "android/build.gradle" ]; then
+            # إزالة الكود القديم الذي قد يتعارض
+            grep -v "allprojects" android/build.gradle | grep -v "rootProject.layout" | grep -v "subprojects" | grep -v "tasks.register" > android/build.gradle.old || true
+            cat android/build.gradle.old >> android/build.gradle.tmp
+            rm android/build.gradle.old
+          fi
+          
+          mv android/build.gradle.tmp android/build.gradle
+
+      # 4. ربط CMake بـ Gradle (بطريقة آمنة تدعم كلا الامتدادين)
       - name: Link CMake to Gradle
         run: |
           if [ -f "android/app/build.gradle.kts" ]; then
