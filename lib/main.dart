@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-import 'dart:convert';
-import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -40,14 +38,12 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedFilePath = '';
   String _logText = '[*] Iron Vault Core V8.0 (AES-256-GCM + C++) Ready.\n';
 
-  // محرك التشفير AES-GCM
   final _algorithm = AesGcm.with256bits();
 
   void _addLog(String msg) {
     setState(() => _logText += '\n$msg');
   }
 
-  // طلب صلاحية التخزين لإنشاء مجلد في التنزيلات
   Future<void> _requestStoragePermission() async {
     var status = await Permission.storage.status;
     if (!status.isGranted) {
@@ -59,9 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // إنشاء مجلد IronVault في التنزيلات وإرجاع المسار
   Future<Directory> _getIronVaultDirectory() async {
-    // مسار التنزيلات في الأندرويد
     Directory downloadsDir = Directory('/storage/emulated/0/Download');
     if (!await downloadsDir.exists()) {
       downloadsDir = Directory('/storage/emulated/0/Downloads');
@@ -84,7 +78,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // الدالة الأساسية للتشفير (AES-256-GCM)
   Future<void> _processFileEncryption() async {
     if (_selectedFilePath.isEmpty) {
       _addLog('[-] Error: Please select a target file first.');
@@ -103,7 +96,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final file = File(_selectedFilePath);
       final bytes = await file.readAsBytes();
       
-      // اشتقاق مفتاح سري من كلمة المرور باستخدام PBKDF2
       final pbkdf2 = Pbkdf2(
         macAlgorithm: Hmac.sha256(),
         iterations: 100000,
@@ -111,19 +103,16 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       final secretKey = await pbkdf2.deriveKeyFromPassword(
         password: _passwordController.text,
-        nonce: List<int>.generate(16, (i) => i), // ملح (Salt)
+        nonce: List<int>.generate(16, (i) => i),
       );
 
-      // التشفير باستخدام AES-256-GCM
       final secretBox = await _algorithm.encrypt(
         bytes,
         secretKey: secretKey,
       );
 
-      // دمج البيانات المشفرة (Nonce + Ciphertext + MAC) في ملف واحد
       final encryptedData = secretBox.concatenation();
 
-      // الحفظ في مجلد IronVault في التنزيلات
       final vaultDir = await _getIronVaultDirectory();
       final fileName = p.basename(_selectedFilePath);
       final savePath = p.join(vaultDir.path, '$fileName.ironvault');
@@ -137,7 +126,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // دالة التشفير الهجين (Hybrid Encryption) - RSA + AES
   Future<void> _exportIdentityHybrid() async {
     if (_passwordController.text.isEmpty) {
       _addLog('[-] Error: Enter password to secure the identity.');
@@ -152,15 +140,14 @@ class _HomeScreenState extends State<HomeScreen> {
     _addLog('[*] Generating AES-256 Session Key...');
     final sessionKey = await AesGcm.with256bits().newSecretKey();
 
-    // تشفير مفتاح الجلسة باستخدام المفتاح العام RSA (التشفير الهجين)
-    // ملاحظة: في بيئة حقيقية، يتم تشفير مفتاح AES باستخدام RSA
     final publicKey = await keyPair.extractPublicKey();
     _addLog('[✓] Hybrid Keys (RSA + AES) Generated Successfully!');
     
-    // حفظ الهوية المشفرة في التنزيلات
     final vaultDir = await _getIronVaultDirectory();
     final identityFile = File(p.join(vaultDir.path, 'IronVault_Identity.ironid'));
-    await identityFile.writeAsString('SIMULATED_ENCRYPTED_IDENTITY_${publicKey.bytes.length}');
+    
+    // تم إصلاح الخطأ هنا باستخدام encode().length بدلاً من bytes.length
+    await identityFile.writeAsString('SIMULATED_ENCRYPTED_IDENTITY_${publicKey.encode().length}');
     
     _addLog('[✓] Encrypted Identity exported to: ${identityFile.path}');
   }
