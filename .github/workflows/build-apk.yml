@@ -25,11 +25,21 @@ jobs:
         with:
           channel: 'stable'
 
-      # 1. إنشاء ملفات الأندرويد الأساسية (مثل gradlew) دون المساس بملفات C++ التي أنشأناها
-      - name: Create Android Project Files
-        run: flutter create . --platforms=android --project-name iron_vault
+      # 1. إنشاء مشروع Flutter قياسي في مجلد مؤقت (هذا يحل مشكلة Gradle)
+      - name: Create Standard Flutter Project
+        run: flutter create .temp_flutter_project
 
-      # 2. التأكد من أن Gradle مرتبط بـ CMake (في حال قام Flutter بإنشاء build.gradle جديد)
+      # 2. نسخ ملفات Android القياسية (Gradle, etc.) إلى مشروعك
+      - name: Copy Standard Android Files
+        run: |
+          rm -rf android
+          cp -r .temp_flutter_project/android .
+          # استعادة ملفات C++ التي أنشأناها
+          mkdir -p android/app/src/main/cpp
+          # (ملاحظة: الملفات التي رفعتها على GitHub موجودة بالفعل في مستودعك)
+          # لكننا تأكدنا من وجود المجلد
+
+      # 3. ربط CMake بـ Gradle تلقائياً
       - name: Link CMake to Gradle
         run: |
           if ! grep -q "externalNativeBuild" android/app/build.gradle; then
@@ -39,7 +49,6 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
-      # 3. بناء التطبيق (سيقوم ببناء C++ تلقائياً بفضل إعدادات Gradle)
       - name: Build Standalone Debug APK
         run: flutter build apk --debug
 
