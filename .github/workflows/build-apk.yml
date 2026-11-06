@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Flutter & C++ Android APK
 
 on:
   push:
@@ -14,68 +14,26 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-
-    - name: Set up JDK 17
+    - name: Set up Java Development Kit (JDK 17)
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Install Dependencies
-      run: npm install
+    - name: Set up Flutter SDK
+      uses: subosito/flutter-action@v2
+      with:
+        channel: 'stable'
+        flutter-version: '3.19.x'
 
-    - name: Generate Android Structure & Bundle Assets
-      run: |
-        npx @react-native-community/cli init IronVaultApp --version 0.73.2 --skip-install || true
-        if [ -d "IronVaultApp/android" ]; then
-          cp -r IronVaultApp/android ./android
-        fi
-        
-        # تجهيز مسارات C++ والموارد والمانيفست
-        if [ -d "android/app/src/main" ]; then
-          mkdir -p android/app/src/main/cpp
-          mkdir -p android/app/src/main/assets
-          mkdir -p android/app/src/main/res/drawable
-          
-          # إنشاء أيقونة XML افتراضية آمنة لتجنب أي خطأ في المانيفست
-          echo '<?xml version="1.0" encoding="utf-8"?><vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#D4AF37" android:pathData="M12,2L2,7l10,5 10-5-10-5zM2,17l10,5 10-5M2,12l10,5 10-5"/></vector>' > android/app/src/main/res/drawable/ic_launcher.xml
+    - name: Get Flutter Dependencies
+      run: flutter pub get
 
-          cp -f CMakeLists.txt android/app/src/main/cpp/ 2>/dev/null || true
-          cp -f iron_core.cpp android/app/src/main/cpp/ 2>/dev/null || true
-          cp -f AndroidManifest.xml android/app/src/main/AndroidManifest.xml 2>/dev/null || true
-        else
-          echo "Error: Failed to establish base android directory."
-          exit 1
-        fi
+    - name: Build Standalone Debug APK
+      run: flutter build apk --debug
 
-        # دمج ملف الجافا سكريبت بصورة آمنة ومباشرة داخل مجلد الأصول لتشغيل التطبيق بدون سيرفر
-        if [ -f "App.js" ]; then
-          npx react-native bundle --platform android --dev false --entry-file App.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/ || true
-        fi
-
-        # حقن إعدادات C++ في ملف الـ Gradle
-        BUILD_GRADLE="android/app/build.gradle"
-        if [ -f "$BUILD_GRADLE" ]; then
-          if ! grep -q "externalNativeBuild" "$BUILD_GRADLE"; then
-            sed -i '/defaultConfig {/a \        externalNativeBuild {\n            cmake {\n                cppFlags ""\n            }\n        }' "$BUILD_GRADLE"
-            sed -i '/android {/a \    externalNativeBuild {\n        cmake {\n            path "src/main/cpp/CMakeLists.txt"\n            version "3.22.1"\n        }\n    }' "$BUILD_GRADLE"
-          fi
-        fi
-
-    - name: Build Debug APK via Gradle
-      run: |
-        cd android
-        chmod +x gradlew
-        ./gradlew assembleDebug
-
-    - name: Upload Final APK Artifact
+    - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ironvault-apk
-        path: |
-          android/app/build/outputs/apk/debug/*.apk
-          **/build/outputs/apk/debug/*.apk
+        name: ironvault-flutter-apk
+        path: build/app/outputs/flutter-apk/app-debug.apk
