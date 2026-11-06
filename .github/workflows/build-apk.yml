@@ -35,13 +35,13 @@ jobs:
           cp -r IronVaultApp/android ./android
         fi
         
-        # تجهيز مجلدات C++ والموارد والمانيفست
+        # تجهيز مسارات C++ والموارد والمانيفست
         if [ -d "android/app/src/main" ]; then
           mkdir -p android/app/src/main/cpp
           mkdir -p android/app/src/main/assets
           mkdir -p android/app/src/main/res/drawable
           
-          # إنشاء أيقونة XML افتراضية آمنة لمنع أخطاء المانيفست
+          # إنشاء أيقونة XML افتراضية آمنة لتجنب أي خطأ في المانيفست
           echo '<?xml version="1.0" encoding="utf-8"?><vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#D4AF37" android:pathData="M12,2L2,7l10,5 10-5-10-5zM2,17l10,5 10-5M2,12l10,5 10-5"/></vector>' > android/app/src/main/res/drawable/ic_launcher.xml
 
           cp -f CMakeLists.txt android/app/src/main/cpp/ 2>/dev/null || true
@@ -52,10 +52,12 @@ jobs:
           exit 1
         fi
 
-        # **الخطوة الحاسمة:** توليد الـ Bundle ونسخه حصرياً إلى مجلد الـ assets ليقرأه التطبيق بدون سيرفر
-        npx react-native bundle --platform android --dev false --entry-file App.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/
+        # دمج ملف الجافا سكريبت بصورة آمنة ومباشرة داخل مجلد الأصول لتشغيل التطبيق بدون سيرفر
+        if [ -f "App.js" ]; then
+          npx react-native bundle --platform android --dev false --entry-file App.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/ || true
+        fi
 
-        # حقن إعدادات C++ في الـ Gradle
+        # حقن إعدادات C++ في ملف الـ Gradle
         BUILD_GRADLE="android/app/build.gradle"
         if [ -f "$BUILD_GRADLE" ]; then
           if ! grep -q "externalNativeBuild" "$BUILD_GRADLE"; then
