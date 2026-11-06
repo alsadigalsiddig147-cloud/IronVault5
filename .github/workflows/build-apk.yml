@@ -25,7 +25,6 @@ jobs:
         with:
           channel: 'stable'
 
-      # 1. إعادة إنشاء مجلد الأندرويد وتوحيد اسم الحزمة
       - name: Recreate Standard Android Project
         run: |
           rm -rf android
@@ -33,12 +32,6 @@ jobs:
           find android -type f \( -name "*.xml" -o -name "*.gradle" -o -name "*.kts" \) -exec sed -i 's/com\.example\.iron_vault/com.example.ironvault/g' {} +
           rm -rf android/app/src/main/kotlin/com/example/iron_vault
 
-      # 2. تحديث المكتبات تلقائياً لأحدث إصدار متوافق
-      - name: Update Dependencies to Compatible Versions
-        run: |
-          flutter pub upgrade --major-versions || flutter pub upgrade
-
-      # 3. إضافة الصلاحيات
       - name: Patch AndroidManifest for Permissions
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
@@ -46,7 +39,6 @@ jobs:
           sed -i '/<application/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />' $MANIFEST
           sed -i '/<application/i \    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />' $MANIFEST
 
-      # 4. توليد ملفات C++
       - name: Generate C++ and CMake Files
         run: |
           mkdir -p android/app/src/main/cpp
@@ -116,7 +108,6 @@ jobs:
           }
           EOF
 
-      # 5. توليد ملفات Kotlin
       - name: Generate Kotlin Files
         run: |
           mkdir -p android/app/src/main/kotlin/com/example/ironvault
@@ -157,17 +148,17 @@ jobs:
           }
           EOF
 
-      # 6. التعديل الذكي لإعدادات Gradle (بدون تدخل يدوي)
-      - name: Smart Patch Gradle and Link CMake
+      - name: Patch Gradle and Link CMake
         run: |
           APP_GRADLE=""
           if [ -f "android/app/build.gradle.kts" ]; then APP_GRADLE="android/app/build.gradle.kts"; 
           elif [ -f "android/app/build.gradle" ]; then APP_GRADLE="android/app/build.gradle"; fi
 
           if [ -n "$APP_GRADLE" ]; then
-            # تحديث الـ SDK تلقائياً ليتوافق مع المكتبات
-            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' "$APP_GRADLE"
-            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' "$APP_GRADLE"
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 37/g' "$APP_GRADLE"
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 37/g' "$APP_GRADLE"
+            sed -i 's/compileSdk = 36/compileSdk = 37/g' "$APP_GRADLE"
+            sed -i 's/compileSdkVersion 36/compileSdkVersion 37/g' "$APP_GRADLE"
             
             if ! grep -q "externalNativeBuild" "$APP_GRADLE"; then
               if [[ "$APP_GRADLE" == *.kts ]]; then
@@ -178,11 +169,12 @@ jobs:
             fi
           fi
 
-      # 7. بناء التطبيق
+      - name: Get Dependencies
+        run: flutter pub get
+
       - name: Build Release APK
         run: flutter build apk --release
 
-      # 8. رفع الملف الناتج
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
