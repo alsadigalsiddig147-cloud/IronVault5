@@ -9,17 +9,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
-  # محرك C++ والوصول للمسارات
   ffi: ^2.1.0
   path_provider: ^2.1.1
   path: ^1.9.0
-  
-  # اختيار الملفات والصلاحيات
-  file_picker: ^10.3.3
+  file_picker: ^8.0.0
   permission_handler: ^11.3.1
-  
-  # محرك التشفير القوي والمسرع للأجهزة
   cryptography: ^2.9.0
   cryptography_flutter: ^2.3.4
 
