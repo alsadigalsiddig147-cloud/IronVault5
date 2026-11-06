@@ -26,7 +26,7 @@ jobs:
         channel: 'stable'
         flutter-version: '3.19.x'
 
-    - name: Initialize Project and Fix Dependencies
+    - name: Initialize Project, Permissions & Dependencies
       run: |
         # التأكد من إنشاء ملف pubspec.yaml بالاعتماديات المطلوبة
         if [ ! -f "pubspec.yaml" ]; then
@@ -56,10 +56,17 @@ jobs:
         EOF
         fi
 
-        # إعادة تهيئة مجلد أندرويد بالكامل لضمان التوافق مع v2 embedding الحديثة
+        # تهيئة هيكل فلوتار وأندرويد نظيف
         rm -rf android
         flutter create . --org com.ironvault --project-name iron_vault --platforms android
-        
+
+        # إضافة صلاحيات تخزين الملفات وقراءة التخزين الخارجي في ملف AndroidManifest.xml
+        MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
+        if [ -f "$MANIFEST_PATH" ]; then
+          # إدراج الصلاحيات قبل وسم application
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>' "$MANIFEST_PATH"
+        fi
+
         # ضبط الحد الأدنى لإصدار SDK ليتوافق مع الحزم المتقدمة
         sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
 
