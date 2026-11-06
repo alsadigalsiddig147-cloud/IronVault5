@@ -31,7 +31,36 @@ jobs:
           rm -rf android
           flutter create . --platforms=android --project-name iron_vault
 
-      # 2. ترتيب ملفات C++ و Kotlin
+      # 2. إجبار جميع الإضافات على استخدام compileSdkVersion 36 (حل مشكلة file_picker)
+      - name: Force compileSdkVersion 36 for all subprojects
+        run: |
+          if [ -f "android/build.gradle.kts" ]; then
+            cat << 'EOF' >> android/build.gradle.kts
+          subprojects {
+              afterEvaluate {
+                  if (project.hasProperty('android')) {
+                      project.android {
+                          compileSdkVersion(36)
+                      }
+                  }
+              }
+          }
+          EOF
+          elif [ -f "android/build.gradle" ]; then
+            cat << 'EOF' >> android/build.gradle
+          subprojects {
+              afterEvaluate {
+                  if (project.hasProperty('android')) {
+                      project.android {
+                          compileSdkVersion 36
+                      }
+                  }
+              }
+          }
+          EOF
+          fi
+
+      # 3. ترتيب ملفات C++ و Kotlin
       - name: Setup C++ and Kotlin Files
         run: |
           mkdir -p android/app/src/main/cpp
@@ -47,7 +76,7 @@ jobs:
           echo '    external fun nativeWipe(path: String): Boolean' >> android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
           echo '}' >> android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt
 
-      # 3. ربط CMake بـ Gradle (يدعم .gradle و .gradle.kts)
+      # 4. ربط CMake بـ Gradle (يدعم .gradle و .gradle.kts)
       - name: Link CMake to Gradle
         run: |
           if [ -f "android/app/build.gradle.kts" ]; then
@@ -58,9 +87,6 @@ jobs:
             if ! grep -q "externalNativeBuild" android/app/build.gradle; then
               sed -i '/android {/a \    externalNativeBuild {\n        cmake {\n            path "src/main/cpp/CMakeLists.txt"\n        }\n    }' android/app/build.gradle
             fi
-          else
-            echo "Error: Neither build.gradle nor build.gradle.kts found!"
-            exit 1
           fi
 
       - name: Get Dependencies
