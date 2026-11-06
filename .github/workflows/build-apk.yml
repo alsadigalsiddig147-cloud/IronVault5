@@ -31,17 +31,19 @@ jobs:
           rm -rf android
           flutter create . --platforms=android --project-name iron_vault
 
-      # 2. إجبار جميع الإضافات على استخدام compileSdkVersion 36 (كود Kotlin DSL صحيح)
+      # 2. إجبار جميع الإضافات على استخدام compileSdkVersion 36 (مع تصحيح بناء جملة Kotlin DSL)
       - name: Force compileSdkVersion 36 for all subprojects
         run: |
+          # إضافة سطر الاستيراد في أعلى الملف
+          sed -i '1i import com.android.build.gradle.BaseExtension' android/build.gradle.kts
+          
+          # إضافة كود إجبار الإصدار في نهاية الملف
           cat << 'EOF' >> android/build.gradle.kts
-          import com.android.build.gradle.BaseExtension
+
           subprojects {
               afterEvaluate {
-                  val isAndroid = plugins.hasPlugin("com.android.application") || plugins.hasPlugin("com.android.library")
-                  if (isAndroid) {
-                      val android = extensions.findByName("android") as? BaseExtension
-                      android?.apply {
+                  if (plugins.hasPlugin("com.android.application") || plugins.hasPlugin("com.android.library")) {
+                      extensions.findByType<com.android.build.gradle.BaseExtension>()?.apply {
                           compileSdkVersion(36)
                       }
                   }
