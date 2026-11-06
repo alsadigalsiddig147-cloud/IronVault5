@@ -78,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // محرك التشفير التدفقي المصحح
+  // محرك التشفير التدفقي المصحح بالكامل
   Future<void> _processFileEncryption() async {
     if (_selectedFilePath.isEmpty) {
       _addLog('[-] Error: Please select a target file first.');
@@ -100,42 +100,49 @@ class _HomeScreenState extends State<HomeScreen> {
       final savePath = p.join(vaultDir.path, '$fileName.ironvault');
       final outputFile = File(savePath);
 
-      // اشتقاق المفتاح السري
-      final pbkdf2 = Pbkdf2(macAlgorithm: Hmac.sha256(), iterations: 100000, bits: 256);
+      // اشتقاق المفتاح السري من كلمة المرور
+      final pbkdf2 = Pbkdf2(
+        macAlgorithm: Hmac.sha256(),
+        iterations: 100000,
+        bits: 256,
+      );
       final secretKey = await pbkdf2.deriveKeyFromPassword(
         password: _passwordController.text,
-        nonce: List<int>.generate(16, (i) => i),
+        nonce: List<int>.generate(16, (i) => i), // ملح ثابت
       );
 
-      // توليد Nonce عشوائي (ضروري لخوارزمية GCM)
+      // توليد Nonce عشوائي لخوارزمية GCM
       final nonce = _algorithm.newNonce();
       
+      // فتح الملف للقراءة كتيار
       final inputStream = file.openRead();
+      // فتح ملف الإخراج للكتابة
       final sink = outputFile.openWrite();
 
-      // كتابة الـ Nonce في بداية الملف لكي نستخدمه عند فك التشفير
-      await sink.add(nonce);
+      // كتابة الـ Nonce في بداية الملف المشفر (ضروري لفك التشفير لاحقاً)
+      sink.add(nonce); 
 
-      // تشفير متدفق
+      // بدء التشفير التدفقي
       final encryptedStream = _algorithm.encryptStream(
         inputStream,
         secretKey: secretKey,
-        nonce: nonce, // تم إضافة المعامل المطلوب
+        nonce: nonce,
       );
 
-      SecretBox? lastBox;
+      Mac? finalMac;
 
-      // قراءة البيانات المشفرة قطعة تلو الأخرى وكتابتها
+      // قراءة القطع المشفرة وكتابتها في الملف
       await for (final box in encryptedStream) {
-        await sink.add(box.cipherText);
-        lastBox = box; // الاحتفاظ بآخر قطعة للحصول على MAC (بصمة التحقق)
+        sink.add(box.cipherText);
+        finalMac = box.mac; // الاحتفاظ ببصمة التحقق
       }
 
-      // كتابة بصمة التحقق (MAC) في نهاية الملف
-      if (lastBox != null) {
-        await sink.add(lastBox.mac.bytes);
+      // بعد انتهاء التشفير، كتابة بصمة التحقق (MAC) في نهاية الملف
+      if (finalMac != null) {
+        sink.add(finalMac.bytes);
       }
 
+      // إغلاق ملف الإخراج
       await sink.close();
 
       _addLog('[✓] File Encrypted successfully using Stream!');
@@ -166,8 +173,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final vaultDir = await _getIronVaultDirectory();
     final identityFile = File(p.join(vaultDir.path, 'IronVault_Identity.ironid'));
     
-    // تم إصلاح الخطأ هنا باستخدام modulus بدلاً من encode
-    await identityFile.writeAsString('SIMULATED_ENCRYPTED_IDENTITY_${publicKey.modulus.toString().length}');
+    // إصلاح خطأ RsaPublicKey: استخدام التمثيل النصي للمفتاح
+    await identityFile.writeAsString('SIMULATED_ENCRYPTED_IDENTITY_${publicKey.toString().length}');
     
     _addLog('[✓] Encrypted Identity exported to: ${identityFile.path}');
   }
