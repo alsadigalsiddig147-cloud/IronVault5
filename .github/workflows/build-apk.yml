@@ -26,15 +26,40 @@ jobs:
         channel: 'stable'
         flutter-version: '3.19.x'
 
-    - name: Prepare Clean Android & Flutter Project
+    - name: Initialize Project and Fix Dependencies
       run: |
-        # حذف مجلد أندرويد القديم المسبب للمشاكل إن وجد
-        rm -rf android
-        
-        # إنشاء هيكل فلوتار وأندرويد متكامل ونظيف حديث
+        # إذا لم يكن pubspec.yaml موجوداً في الجذر، نقوم بإنشائه تلقائياً لمنع أي نقص
+        if [ ! -f "pubspec.yaml" ]; then
+          cat << 'EOF' > pubspec.yaml
+        name: iron_vault
+        description: "Iron Vault Hybrid - C++ Engine with Flutter"
+        publish_to: 'none'
+        version: 1.0.0+1
+
+        environment:
+          sdk: '>=3.0.0 <4.0.0'
+
+        dependencies:
+          flutter:
+            sdk: flutter
+          ffi: ^2.1.0
+          path_provider: ^2.1.1
+          file_picker: ^8.0.0
+
+        dev_dependencies:
+          flutter_test:
+            sdk: flutter
+          flutter_lints: ^3.0.0
+
+        flutter:
+          uses-material-design: true
+        EOF
+        fi
+
+        # إنشاء هيكل أندرويد ودعم المنصة بشكل نظيف
         flutter create . --org com.ironvault --project-name iron_vault --platforms android
         
-        # ضبط الحد الأدنى لإصدار SDK في ملفات Gradle ليتوافق مع الحزم المتقدمة
+        # ضبط الحد الأدنى للإصدار ليتوافق مع الحزم الحديثة
         sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
 
     - name: Get Flutter Dependencies
