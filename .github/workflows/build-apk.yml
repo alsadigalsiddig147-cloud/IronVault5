@@ -28,7 +28,7 @@ jobs:
 
     - name: Initialize Project and Fix Dependencies
       run: |
-        # إذا لم يكن pubspec.yaml موجوداً في الجذر، نقوم بإنشائه تلقائياً لمنع أي نقص
+        # التأكد من إنشاء ملف pubspec.yaml بالاعتماديات المطلوبة
         if [ ! -f "pubspec.yaml" ]; then
           cat << 'EOF' > pubspec.yaml
         name: iron_vault
@@ -56,10 +56,11 @@ jobs:
         EOF
         fi
 
-        # إنشاء هيكل أندرويد ودعم المنصة بشكل نظيف
+        # إعادة تهيئة مجلد أندرويد بالكامل لضمان التوافق مع v2 embedding الحديثة
+        rm -rf android
         flutter create . --org com.ironvault --project-name iron_vault --platforms android
         
-        # ضبط الحد الأدنى للإصدار ليتوافق مع الحزم الحديثة
+        # ضبط الحد الأدنى لإصدار SDK ليتوافق مع الحزم المتقدمة
         sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
 
     - name: Get Flutter Dependencies
