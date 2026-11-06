@@ -44,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedFilePath = '';
   String _selectedCarrierPath = '';
   bool _enableDoD = false; 
-  String _logText = '[*] Iron Vault Core V14.0 (Stable Release) Ready.\n';
+  String _logText = '[*] Iron Vault Core V15.0 Ready.\n';
 
   RsaKeyPair? _rsaKeyPair;
 
@@ -101,7 +101,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return await pbkdf2.deriveKeyFromPassword(password: password, nonce: salt);
   }
 
-  // --- قسم تشفير الملفات ---
   Future<void> _encryptFile() async {
     if (_selectedFilePath.isEmpty || _passwordController.text.isEmpty) {
       _addLog('[-] Error: File or password missing.');
@@ -243,7 +242,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // --- قسم الإخفاء في الوسائط ---
   Future<void> _hideFileInMedia() async {
     if (_selectedCarrierPath.isEmpty || _selectedFilePath.isEmpty || _passwordController.text.isEmpty) {
       _addLog('[-] Error: Carrier, File, and Password are required.');
@@ -315,8 +313,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return -1;
   }
 
-  // --- قسم إدارة الهويات (تم الإصلاح الجذري هنا) ---
-  
   Future<void> _generateIdentityKeys() async {
     _addLog('[*] Generating RSA-4096 Key Pair...');
     try {
@@ -343,11 +339,10 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       _addLog('[*] Bundling and Encrypting Identity with Password...');
       
-      // الحل: استخدم extract() للحصول على RsaKeyPairData ثم المكونات
+      // الحل الجذري: استخدم extract() للحصول على RsaKeyPairData ثم المكونات
       final RsaKeyPairData rsaData = await _rsaKeyPair!.extract();
       
-      // المفتاح الخاص في RSA يتم تمثيله بالمعامل d (وغالباً p, q, dp, dq, qinv)
-      // يمكننا تحويل d إلى base64 لتخزينه
+      // المفتاح الخاص في RSA يتم تمثيله بالمعامل d
       final rsaPrivBytes = rsaData.d; 
       
       // المفتاح العام
@@ -357,7 +352,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final bundle = {
         'type': 'RSA-4096',
         'rsa_public': rsaPubString,
-        'rsa_private': base64Encode(rsaPrivBytes),
+        'rsa_private': base64Encode(rsaPrivBytes), 
         'timestamp': DateTime.now().toIso8601String(),
       };
 
@@ -421,7 +416,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('🛡️ IronVault V14 (Military Grade)', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 14)),
+        title: const Text('🛡️ IronVault V15 (Military Grade)', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 14)),
         backgroundColor: const Color(0xFF111418),
         centerTitle: true,
       ),
