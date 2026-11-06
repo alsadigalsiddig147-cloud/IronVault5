@@ -31,24 +31,7 @@ jobs:
           rm -rf android
           flutter create . --platforms=android --project-name iron_vault
 
-      # 2. إنشاء ملف init.gradle لإجبار جميع الإضافات على استخدام compileSdk 36
-      - name: Create Gradle Init Script
-        run: |
-          cat << 'EOF' > android/init.gradle
-          allprojects {
-              afterEvaluate { project ->
-                  if (project.extensions.findByName("android") != null) {
-                      def android = project.extensions.getByName("android")
-                      // Force all sub-projects (like file_picker) to compile against SDK 36
-                      if (android.hasProperty("compileSdkVersion")) {
-                          android.compileSdkVersion = 36
-                      }
-                  }
-              }
-          }
-          EOF
-
-      # 3. ترتيب ملفات C++ و Kotlin
+      # 2. ترتيب ملفات C++ و Kotlin
       - name: Setup C++ and Kotlin Files
         run: |
           mkdir -p android/app/src/main/cpp
@@ -66,6 +49,48 @@ jobs:
           }
           EOF
 
+      # 3. تعديل build.gradle الرئيسي بأمان باستخدام Python (لإجبار compileSdk 36)
+      - name: Safely Patch build.gradle for compileSdk 36
+        run: |
+          cat << 'PYEOF' > patch_gradle.py
+          import os
+          import re
+
+          path = 'android/build.gradle'
+          if not os.path.exists(path):
+              print("File not found, skipping patch.")
+              exit(0)
+
+          with open(path, 'r') as f:
+              content = f.read()
+
+          # إذا كان الكود موجوداً مسبقاً، لا تفعل شيئاً
+          if 'compileSdkVersion = 36' in content:
+              print("Patch already applied.")
+              exit(0)
+
+          # الكود الذي نريد إضافته
+          patch = """
+          subprojects {
+              afterEvaluate { project ->
+                  if (project.hasProperty('android')) {
+                      project.android {
+                          compileSdkVersion = 36
+                      }
+                  }
+              }
+          }
+          """
+
+          # إدراج الكود في بداية الملف لضمان عدم حدوث أخطاء في بناء الجملة
+          new_content = patch + "\n" + content
+
+          with open(path, 'w') as f:
+              f.write(new_content)
+          print("Patch applied successfully.")
+          PYEOF
+          python3 patch_gradle.py
+
       # 4. ربط CMake بـ Gradle
       - name: Link CMake to Gradle
         run: |
@@ -82,9 +107,9 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
-      # 5. بناء التطبيق باستخدام init.gradle لحل مشكلة الإصدارات
+      # 5. بناء التطبيق (بدون --init-script)
       - name: Build Standalone Debug APK
-        run: flutter build apk --debug --init-script=android/init.gradle
+        run: flutter build apk --debug
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
