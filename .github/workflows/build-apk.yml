@@ -25,26 +25,32 @@ jobs:
         with:
           channel: 'stable'
 
+      # 1. مسح مجلد الأندرويد القديم وإنشاء واحد جديد ونظيف
       - name: Recreate Standard Android Project
         run: |
           rm -rf android
           flutter create . --platforms=android --project-name iron_vault
 
-      # إصلاح: إضافة android:exported إلى MainActivity في AndroidManifest
-      - name: Fix AndroidManifest (exported attribute)
+      # 2. إضافة الصلاحيات وضبط AndroidManifest لمنع فشل التثبيت
+      - name: Patch AndroidManifest for Permissions and Exported
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
-          # استبدال سطر activity الرئيسي لضمان وجود android:exported="true"
-          sed -i 's/<activity android:name=".MainActivity"/<activity android:name=".MainActivity" android:exported="true"/' $MANIFEST
+          
           # إضافة صلاحيات التخزين
           sed -i '/<application/i \    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />' $MANIFEST
           sed -i '/<application/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />' $MANIFEST
           sed -i '/<application/i \    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />' $MANIFEST
+          
+          # التأكد من وجود android:exported="true" (ضروري جداً لأندرويد 12+)
+          if ! grep -q 'android:exported="true"' $MANIFEST; then
+            sed -i 's/android:name=".MainActivity"/android:name=".MainActivity"\n            android:exported="true"/' $MANIFEST
+          fi
 
-      # توليد ملفات C++ و Kotlin (نفس الكود السابق)
+      # 3. توليد ملفات C++ و Kotlin (محرك التمزيق العسكري)
       - name: Generate C++ and Kotlin Files
         run: |
           mkdir -p android/app/src/main/cpp
+          
           cat > android/app/src/main/cpp/CMakeLists.txt << 'EOF'
           cmake_minimum_required(VERSION 3.22.1)
           project("iron_core")
@@ -52,6 +58,7 @@ jobs:
           find_library(log-lib log)
           target_link_libraries(iron_core ${log-lib})
           EOF
+          
           cat > android/app/src/main/cpp/iron_core.cpp << 'EOF'
           #include <jni.h>
           #include <string>
@@ -59,25 +66,32 @@ jobs:
           #include <fstream>
           #include <android/log.h>
           #include <algorithm>
+
           #define LOG_TAG "IronVaultCore"
           #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+
           extern "C" {
               JNIEXPORT jboolean JNICALL
               Java_com_example_ironvault_NativeCore_nativeWipe(JNIEnv *env, jobject thiz, jstring path) {
                   const char *nativePath = env->GetStringUTFChars(path, 0);
                   LOGI("Executing DoD 5220.22-M Secure Wipe: %s", nativePath);
+                  
                   std::fstream file(nativePath, std::ios::binary | std::ios::in | std::ios::out);
                   if (file.is_open()) {
                       file.seekg(0, std::ios::end);
                       std::streamsize fileSize = file.tellg();
                       file.seekg(0, std::ios::beg);
+
                       const std::streamsize CHUNK_SIZE = 64 * 1024; 
                       std::vector<char> buffer(CHUNK_SIZE);
+
                       for (int pass = 0; pass < 3; ++pass) {
                           char fillChar = (pass == 0) ? 0x00 : ((pass == 1) ? 0xFF : 0x55);
                           std::fill(buffer.begin(), buffer.end(), fillChar);
+                          
                           file.seekp(0, std::ios::beg);
                           std::streamsize remaining = fileSize;
+                          
                           while (remaining > 0) {
                               std::streamsize to_write = std::min(CHUNK_SIZE, remaining);
                               file.write(buffer.data(), to_write);
@@ -93,6 +107,7 @@ jobs:
               }
           }
           EOF
+
           mkdir -p android/app/src/main/kotlin/com/example/ironvault
           cat > android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt << 'EOF'
           package com.example.ironvault
@@ -102,18 +117,22 @@ jobs:
           }
           EOF
 
+      # 4. جلب المكتبات
       - name: Get Dependencies
         run: flutter pub get
 
+      # 5. إصلاح إصدارات Gradle وربط CMake
       - name: Patch Gradle and Link CMake
         run: |
           APP_GRADLE=""
           if [ -f "android/app/build.gradle.kts" ]; then APP_GRADLE="android/app/build.gradle.kts"; 
           elif [ -f "android/app/build.gradle" ]; then APP_GRADLE="android/app/build.gradle"; fi
+
           if [ -n "$APP_GRADLE" ]; then
             sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' "$APP_GRADLE"
             sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' "$APP_GRADLE"
             sed -i 's/compileSdkVersion 34/compileSdkVersion 36/g' "$APP_GRADLE"
+            
             if ! grep -q "externalNativeBuild" "$APP_GRADLE"; then
               if [[ "$APP_GRADLE" == *.kts ]]; then
                 sed -i '/android {/a \    externalNativeBuild {\n        cmake {\n            path = file("src/main/cpp/CMakeLists.txt")\n        }\n    }' "$APP_GRADLE"
@@ -122,10 +141,12 @@ jobs:
               fi
             fi
           fi
+
           ROOT_GRADLE="android/build.gradle"
           if [ -f "$ROOT_GRADLE" ]; then
             if ! grep -q "subprojects {" "$ROOT_GRADLE"; then
               cat << 'EOF' >> "$ROOT_GRADLE"
+
           subprojects {
               afterEvaluate { project ->
                   if (project.hasProperty('android')) {
@@ -139,10 +160,11 @@ jobs:
             fi
           fi
 
-      # التغيير الأهم: بناء نسخة release بدلاً من debug
+      # 6. بناء نسخة Release الشاملة (Universal) - تحتوي على كل الميزات وكل معماريات المعالجات
       - name: Build Release APK
         run: flutter build apk --release
 
+      # 7. رفع الملف الناتج
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
