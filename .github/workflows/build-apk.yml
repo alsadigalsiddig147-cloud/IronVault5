@@ -25,18 +25,13 @@ jobs:
         with:
           channel: 'stable'
 
-      # 1. إنشاء مشروع أندرويد وتوحيد اسم الحزمة
       - name: Recreate Standard Android Project
         run: |
           rm -rf android
           flutter create . --platforms=android --project-name iron_vault --org com.example
-          
-          # إصلاح اسم الحزمة ليتطابق مع كود Kotlin المخصص لنا
           find android -type f \( -name "*.xml" -o -name "*.gradle" -o -name "*.kts" \) -exec sed -i 's/com\.example\.iron_vault/com.example.ironvault/g' {} +
-          # حذف ملف MainActivity الافتراضي لتجنب التداخل
           rm -rf android/app/src/main/kotlin/com/example/iron_vault
 
-      # 2. إضافة الصلاحيات
       - name: Patch AndroidManifest for Permissions
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
@@ -44,7 +39,6 @@ jobs:
           sed -i '/<application/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />' $MANIFEST
           sed -i '/<application/i \    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />' $MANIFEST
 
-      # 3. توليد ملفات C++
       - name: Generate C++ and CMake Files
         run: |
           mkdir -p android/app/src/main/cpp
@@ -114,7 +108,6 @@ jobs:
           }
           EOF
 
-      # 4. توليد ملفات Kotlin (يجب أن تتطابق الحزمة مع ما سبق)
       - name: Generate Kotlin Files
         run: |
           mkdir -p android/app/src/main/kotlin/com/example/ironvault
@@ -129,7 +122,6 @@ jobs:
 
           cat > android/app/src/main/kotlin/com/example/ironvault/MainActivity.kt << 'EOF'
           package com.example.ironvault
-
           import io.flutter.embedding.android.FlutterActivity
           import io.flutter.embedding.engine.FlutterEngine
           import io.flutter.plugin.common.MethodChannel
@@ -156,11 +148,9 @@ jobs:
           }
           EOF
 
-      # 5. جلب المكتبات
       - name: Get Dependencies
         run: flutter pub get
 
-      # 6. إصلاح إصدارات Gradle وربط CMake
       - name: Patch Gradle and Link CMake
         run: |
           APP_GRADLE=""
@@ -198,11 +188,9 @@ jobs:
             fi
           fi
 
-      # 7. بناء التطبيق
       - name: Build Release APK
         run: flutter build apk --release
 
-      # 8. رفع الملف
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
