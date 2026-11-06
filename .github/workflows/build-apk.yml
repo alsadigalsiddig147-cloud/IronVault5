@@ -28,16 +28,22 @@ jobs:
     - name: Install Dependencies
       run: npm install
 
-    - name: Generate Android Structure & C++ Integration
+    - name: Generate Android Structure & Resources
       run: |
         npx @react-native-community/cli init IronVaultApp --version 0.73.2 --skip-install || true
         if [ -d "IronVaultApp/android" ]; then
           cp -r IronVaultApp/android ./android
         fi
         
-        # دمج ملفات C++ ومجلدات الأصول بصورة آمنة
-        if [ -d "android/app" ]; then
+        # إنشاء مجلدات الموارد والأصول ووضع أيقونة افتراضية لمنع خطأ المانيفست
+        if [ -d "android/app/src/main" ]; then
           mkdir -p android/app/src/main/cpp
+          mkdir -p android/app/src/main/assets
+          mkdir -p android/app/src/main/res/drawable
+          
+          # إنشاء أيقونة XML افتراضية آمنة لتجتناب خطأ ic_launcher not found
+          echo '<?xml version="1.0" encoding="utf-8"?><vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="#D4AF37" android:pathData="M12,2L2,7l10,5 10-5-10-5zM2,17l10,5 10-5M2,12l10,5 10-5"/></vector>' > android/app/src/main/res/drawable/ic_launcher.xml
+
           cp -f CMakeLists.txt android/app/src/main/cpp/ 2>/dev/null || true
           cp -f iron_core.cpp android/app/src/main/cpp/ 2>/dev/null || true
           cp -f AndroidManifest.xml android/app/src/main/AndroidManifest.xml 2>/dev/null || true
@@ -46,8 +52,7 @@ jobs:
           exit 1
         fi
 
-        # توليد حزمة الجافا سكريبت وتشغيل البندل بدون أي أوامر تفاعلية أو تشغيل خاطئ
-        mkdir -p android/app/src/main/assets
+        # توليد حزمة الجافا سكريبت للعمل بشكل مستقل بدون سيرفر خارجي
         npx react-native bundle --platform android --dev false --entry-file App.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/ || true
 
         # حقن إعدادات C++ في الـ Gradle
