@@ -49,28 +49,32 @@ jobs:
           }
           EOF
 
-      # 3. تعديل build.gradle الرئيسي بأمان باستخدام Python (لإجبار compileSdk 36)
-      - name: Safely Patch build.gradle for compileSdk 36
+      # 3. تعديل ملفات Gradle بأمان باستخدام Python (لإجبار compileSdk 36)
+      - name: Patch Gradle Files for compileSdk 36
         run: |
           cat << 'PYEOF' > patch_gradle.py
           import os
-          import re
 
-          path = 'android/build.gradle'
-          if not os.path.exists(path):
-              print("File not found, skipping patch.")
-              exit(0)
+          # 1. تعديل ملف التطبيق الأساسي (app/build.gradle)
+          app_gradle = 'android/app/build.gradle'
+          if os.path.exists(app_gradle):
+              with open(app_gradle, 'r') as f:
+                  content = f.read()
+              # استبدال أي إشارة إلى flutter.compileSdkVersion بالرقم 36
+              content = content.replace('compileSdkVersion flutter.compileSdkVersion', 'compileSdkVersion 36')
+              content = content.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 36')
+              with open(app_gradle, 'w') as f:
+                  f.write(content)
+              print("Patched app/build.gradle")
 
-          with open(path, 'r') as f:
-              content = f.read()
-
-          # إذا كان الكود موجوداً مسبقاً، لا تفعل شيئاً
-          if 'compileSdkVersion = 36' in content:
-              print("Patch already applied.")
-              exit(0)
-
-          # الكود الذي نريد إضافته
-          patch = """
+          # 2. تعديل ملف المشروع الرئيسي (build.gradle) لإجبار جميع الإضافات
+          root_gradle = 'android/build.gradle'
+          if os.path.exists(root_gradle):
+              with open(root_gradle, 'r') as f:
+                  content = f.read()
+              
+              if 'subprojects {' not in content:
+                  patch = """
           subprojects {
               afterEvaluate { project ->
                   if (project.hasProperty('android')) {
@@ -81,13 +85,13 @@ jobs:
               }
           }
           """
-
-          # إدراج الكود في بداية الملف لضمان عدم حدوث أخطاء في بناء الجملة
-          new_content = patch + "\n" + content
-
-          with open(path, 'w') as f:
-              f.write(new_content)
-          print("Patch applied successfully.")
+                  # إدراج الكود في نهاية الملف
+                  content += "\n" + patch
+                  with open(root_gradle, 'w') as f:
+                      f.write(content)
+                  print("Patched root build.gradle")
+              else:
+                  print("Root build.gradle already patched")
           PYEOF
           python3 patch_gradle.py
 
@@ -107,7 +111,7 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
-      # 5. بناء التطبيق (بدون --init-script)
+      # 5. بناء التطبيق
       - name: Build Standalone Debug APK
         run: flutter build apk --debug
 
