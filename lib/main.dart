@@ -45,9 +45,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedCarrierPath = '';
   String _selectedKeyType = 'RSA-4096';
   bool _enableDoD = false; 
-  String _logText = '[*] Iron Vault Core V10.2 Ready.\n';
+  String _logText = '[*] Iron Vault Core V10.3 Ready.\n';
 
-  // حفظ المفاتيح باستخدام النوع الأساسي KeyPair لتجنب أخطاء الأنواع
   KeyPair? _generatedKeyPair;
 
   final _algorithm = AesGcm.with256bits();
@@ -305,7 +304,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return -1;
   }
 
-  // --- قسم إدارة الهويات (تم إصلاح الأخطاء البرمجية) ---
+  // --- قسم إدارة الهويات (تم الإصلاح النهائي) ---
   
   Future<void> _generateIdentityKeys() async {
     _addLog('[*] Generating high-security $_selectedKeyType Identity Keys...');
@@ -340,14 +339,14 @@ class _HomeScreenState extends State<HomeScreen> {
       _addLog('[*] Encrypting and Exporting Identity Bundle...');
       Map<String, dynamic> bundle = {};
 
-      // استخراج المفتاح العام
-      final publicKey = await _generatedKeyPair!.extractPublicKey();
-      // استخراج المفتاح الخاص باستخدام الدالة الصحيحة extractPrivateKeyBytes
-      final privateKeyBytes = await _generatedKeyPair!.extractPrivateKeyBytes();
-
+      // استخدام extract() للحصول على KeyPairData الذي يحتوي على المفاتيح
+      final keyPairData = await _generatedKeyPair!.extract();
+      
+      // keyPairData هو من نوع KeyPairData، والـ publicKey فيه من نوع SimplePublicKey
+      // SimplePublicKey يمتلك خاصية bytes
       bundle['type'] = _selectedKeyType;
-      bundle['public'] = base64Encode(publicKey.bytes);
-      bundle['private'] = base64Encode(privateKeyBytes);
+      bundle['public'] = base64Encode(keyPairData.publicKey.bytes);
+      bundle['private'] = base64Encode(keyPairData.privateKeyBytes);
 
       final jsonStr = jsonEncode(bundle);
       final vaultDir = await _getIronVaultDirectory();
