@@ -47,7 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedFilePath = '';
   String _selectedCarrierPath = '';
   bool _enableDoD = false; 
-  String _logText = '[*] Iron Vault Core V18.0 (Stable) Ready.\n';
+  String _logText = '[*] Iron Vault Core V19.0 (Stable) Ready.\n';
 
   RsaKeyPair? _rsaKeyPair;
   final _algorithm = AesGcm.with256bits();
@@ -317,7 +317,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _generateIdentityKeys() async {
     _addLog('[*] Generating RSA-4096 Key Pair...');
     try {
-      // استخدام RsaSsaPkcs1v15 بدلاً من RsaPss لضمان التوافق مع جميع الأجهزة
       final rsa = RsaSsaPkcs1v15.sha256();
       _rsaKeyPair = await rsa.newKeyPair();
       _addLog('[✓] RSA-4096 Generated successfully.');
@@ -341,10 +340,12 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       _addLog('[*] Bundling and Encrypting Identity with Password...');
       
-      // استخراج المفتاح الخاص باستخدام الدالة الصحيحة
-      final rsaPrivBytes = await _rsaKeyPair!.extractPrivateKeyBytes();
-      final rsaPub = await _rsaKeyPair!.extractPublicKey();
-      final rsaPubString = rsaPub.toString();
+      // الحل الجذري: استخدام extract() للحصول على المكونات
+      final RsaKeyPairData rsaData = await _rsaKeyPair!.extract();
+      
+      // استخدام المعامل d (المفتاح الخاص) و n (المفتاح العام)
+      final rsaPrivBytes = rsaData.d; 
+      final rsaPubString = rsaData.publicKey.toString();
 
       final bundle = {
         'type': 'RSA-4096',
@@ -412,7 +413,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('🛡️ IronVault V18 (Military Grade)', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 14)),
+        title: const Text('🛡️ IronVault V19 (Military Grade)', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 14)),
         backgroundColor: const Color(0xFF111418),
         centerTitle: true,
       ),
