@@ -78,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // محرك التشفير التدفقي المصحح بالكامل
+  // محرك التشفير التدفقي (تم تصحيحه ليتوافق مع onMac)
   Future<void> _processFileEncryption() async {
     if (_selectedFilePath.isEmpty) {
       _addLog('[-] Error: Please select a target file first.');
@@ -122,24 +122,25 @@ class _HomeScreenState extends State<HomeScreen> {
       // كتابة الـ Nonce في بداية الملف المشفر (ضروري لفك التشفير لاحقاً)
       sink.add(nonce); 
 
-      // بدء التشفير التدفقي
+      // متغير لتخزين بصمة التحقق بعد انتهاء التشفير
+      Mac? finalMac;
+
+      // بدء التشفير التدفقي مع تمرير onMac المطلوب
       final encryptedStream = _algorithm.encryptStream(
         inputStream,
         secretKey: secretKey,
         nonce: nonce,
+        onMac: (Mac mac) {
+          finalMac = mac; // حفظ بصمة التحقق عند انتهاء التدفق
+        },
       );
 
-      Mac? finalMac;
-
-      // قراءة القطع المشفرة وكتابتها في الملف
-      await for (final box in encryptedStream) {
-        sink.add(box.cipherText);
-        finalMac = box.mac; // الاحتفاظ ببصمة التحقق
-      }
+      // كتابة البيانات المشفرة إلى ملف الإخراج
+      await sink.addStream(encryptedStream);
 
       // بعد انتهاء التشفير، كتابة بصمة التحقق (MAC) في نهاية الملف
       if (finalMac != null) {
-        sink.add(finalMac.bytes);
+        sink.add(finalMac!.bytes);
       }
 
       // إغلاق ملف الإخراج
