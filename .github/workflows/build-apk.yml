@@ -25,13 +25,11 @@ jobs:
         with:
           channel: 'stable'
 
-      # 1. إنشاء مشروع أندرويد قياسي ونظيف
       - name: Recreate Standard Android Project
         run: |
           rm -rf android
           flutter create . --platforms=android --project-name iron_vault
 
-      # 2. ترتيب ملفات C++ و Kotlin
       - name: Setup C++ and Kotlin Files
         run: |
           mkdir -p android/app/src/main/cpp
@@ -49,53 +47,9 @@ jobs:
           }
           EOF
 
-      # 3. تعديل ملفات Gradle بأمان باستخدام Python (لإجبار compileSdk 36)
-      - name: Patch Gradle Files for compileSdk 36
-        run: |
-          cat << 'PYEOF' > patch_gradle.py
-          import os
+      - name: Get Dependencies
+        run: flutter pub get
 
-          # 1. تعديل ملف التطبيق الأساسي (app/build.gradle)
-          app_gradle = 'android/app/build.gradle'
-          if os.path.exists(app_gradle):
-              with open(app_gradle, 'r') as f:
-                  content = f.read()
-              # استبدال أي إشارة إلى flutter.compileSdkVersion بالرقم 36
-              content = content.replace('compileSdkVersion flutter.compileSdkVersion', 'compileSdkVersion 36')
-              content = content.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 36')
-              with open(app_gradle, 'w') as f:
-                  f.write(content)
-              print("Patched app/build.gradle")
-
-          # 2. تعديل ملف المشروع الرئيسي (build.gradle) لإجبار جميع الإضافات
-          root_gradle = 'android/build.gradle'
-          if os.path.exists(root_gradle):
-              with open(root_gradle, 'r') as f:
-                  content = f.read()
-              
-              if 'subprojects {' not in content:
-                  patch = """
-          subprojects {
-              afterEvaluate { project ->
-                  if (project.hasProperty('android')) {
-                      project.android {
-                          compileSdkVersion = 36
-                      }
-                  }
-              }
-          }
-          """
-                  # إدراج الكود في نهاية الملف
-                  content += "\n" + patch
-                  with open(root_gradle, 'w') as f:
-                      f.write(content)
-                  print("Patched root build.gradle")
-              else:
-                  print("Root build.gradle already patched")
-          PYEOF
-          python3 patch_gradle.py
-
-      # 4. ربط CMake بـ Gradle
       - name: Link CMake to Gradle
         run: |
           if [ -f "android/app/build.gradle.kts" ]; then
@@ -108,10 +62,6 @@ jobs:
             fi
           fi
 
-      - name: Get Dependencies
-        run: flutter pub get
-
-      # 5. بناء التطبيق
       - name: Build Standalone Debug APK
         run: flutter build apk --debug
 
