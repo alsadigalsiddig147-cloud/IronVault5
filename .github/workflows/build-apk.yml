@@ -28,7 +28,7 @@ jobs:
     - name: Install Dependencies
       run: npm install
 
-    - name: Generate JS Bundle & Robust Android Structure
+    - name: Generate Android Structure & C++ Integration
       run: |
         npx @react-native-community/cli init IronVaultApp --version 0.73.2 --skip-install || true
         if [ -d "IronVaultApp/android" ]; then
@@ -46,8 +46,9 @@ jobs:
           exit 1
         fi
 
-        # بناء وتوليد ملف البندل ليعمل التطبيق بشكل مستقل بدون سيرفر خارجي
+        # توليد حزمة الجافا سكريبت بصيغة صحيحة ومستقلة لتجنب مشاكل سيرفر التطوير
         mkdir -p android/app/src/main/assets
+        npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/ || \
         npx react-native bundle --platform android --dev false --entry-file App.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/
 
         # حقن إعدادات C++ في الـ Gradle
