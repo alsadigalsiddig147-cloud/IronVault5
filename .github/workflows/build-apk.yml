@@ -26,6 +26,9 @@ jobs:
           channel: 'stable'
           flutter-version: '3.19.x'
 
+      - name: Create Android Project Files automatically
+        run: flutter create . --platforms=android --force
+
       - name: Get Dependencies
         run: flutter pub get
 
