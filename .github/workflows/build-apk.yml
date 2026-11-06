@@ -26,17 +26,13 @@ jobs:
         channel: 'stable'
         flutter-version: '3.19.x'
 
-    - name: Prepare Project Structure
+    - name: Prepare Clean Android & Flutter Project
       run: |
-        # إنشاء مشروع فلوتار نظيف مؤقت لجلب الهيكل الداعم لأندرويد
-        flutter create temp_app --org com.ironvault --project-name iron_vault --platforms android
+        # توليد هيكل أندرويد متوافق ونظيف
+        flutter create . --org com.ironvault --project-name iron_vault --platforms android
         
-        # نقل مجلد أندرويد الداعم للمشروع الرئيسي
-        cp -r temp_app/android ./
-        
-        # التأكد من وجود المجلدات الأساسية
-        mkdir -p lib
-        mkdir -p android/app/src/main/cpp
+        # ضبط الحد الأدنى لإصدار SDK في ملفات Gradle ليتوافق مع الحزم المتقدمة
+        sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
 
     - name: Get Flutter Dependencies
       run: flutter pub get
