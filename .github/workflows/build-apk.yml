@@ -1,44 +1,56 @@
 name: Build Flutter & C++ Android APK
-​on:
-push:
-branches: [ "main", "master" ]
-pull_request:
-branches: [ "main", "master" ]
-​jobs:
-build:
-runs-on: ubuntu-latest
-​steps:
-- name: Checkout Repository
-uses: actions/checkout@v4
-​- name: Set up Java Development Kit (JDK 17)
-uses: actions/setup-java@v4
-with:
-distribution: 'temurin'
-java-version: '17'
-​- name: Set up Flutter SDK
-uses: subosito/flutter-action@v2
-with:
-channel: 'stable'
-flutter-version: '3.19.x'
-​- name: Rebuild Fresh Android Structure & Add Permissions
-run: |
-# 1. إزالة مجلد أندرويد القديم بالكامل لمسح أي ملف Manifest قديم مسبب للمشكلة
-rm -rf android
-​# 2. توليد هيكل أندرويد قياسي حديث بدعم v2 embedding
-flutter create . --org com.ironvault --project-name iron_vault --platforms android
-​# 3. إدراج الصلاحيات المطلوبة (التخزين وقراءة ملفات الجهاز) في AndroidManifest.xml
-MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
-if [ -f "$MANIFEST_PATH" ]; then
-sed -i '/<application/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>' "$MANIFEST_PATH"
-fi
-​# 4. رفع الحد الأدنى للـ SDK لتوافق الحزم
-sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
-​- name: Get Dependencies
-run: flutter pub get
-​- name: Build Standalone Debug APK
-run: flutter build apk --debug
-​- name: Upload APK Artifact
-uses: actions/upload-artifact@v4
-with:
-name: ironvault-flutter-apk
-path: build/app/outputs/flutter-apk/app-debug.apk
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java Development Kit (JDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          flutter-version: '3.19.x'
+
+      - name: Rebuild Fresh Android Structure & Add Permissions
+        run: |
+          # 1. إزالة مجلد أندرويد القديم بالكامل لمسح أي ملف Manifest قديم مسبب للمشكلة
+          rm -rf android
+          
+          # 2. توليد هيكل أندرويد قياسي حديث بدعم v2 embedding
+          flutter create . --org com.ironvault --project-name iron_vault --platforms android
+          
+          # 3. إدراج الصلاحيات المطلوبة (التخزين وقراءة ملفات الجهاز) في AndroidManifest.xml
+          MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
+          if [ -f "$MANIFEST_PATH" ]; then
+            sed -i '/<application/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>' "$MANIFEST_PATH"
+          fi
+          
+          # 4. رفع الحد الأدنى للـ SDK لتوافق الحزم
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Build Standalone Debug APK
+        run: flutter build apk --debug
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ironvault-flutter-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
