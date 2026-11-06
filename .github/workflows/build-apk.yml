@@ -25,29 +25,29 @@ jobs:
         with:
           channel: 'stable'
 
-      # 1. مسح مجلد الأندرويد القديم وإنشاء واحد جديد
+      # 1. إنشاء مشروع أندرويد وتوحيد اسم الحزمة
       - name: Recreate Standard Android Project
         run: |
           rm -rf android
-          flutter create . --platforms=android --project-name iron_vault
+          flutter create . --platforms=android --project-name iron_vault --org com.example
+          
+          # إصلاح اسم الحزمة ليتطابق مع كود Kotlin المخصص لنا
+          find android -type f \( -name "*.xml" -o -name "*.gradle" -o -name "*.kts" \) -exec sed -i 's/com\.example\.iron_vault/com.example.ironvault/g' {} +
+          # حذف ملف MainActivity الافتراضي لتجنب التداخل
+          rm -rf android/app/src/main/kotlin/com/example/iron_vault
 
-      # 2. إضافة الصلاحيات وضبط AndroidManifest
-      - name: Patch AndroidManifest for Permissions and Exported
+      # 2. إضافة الصلاحيات
+      - name: Patch AndroidManifest for Permissions
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           sed -i '/<application/i \    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />' $MANIFEST
           sed -i '/<application/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />' $MANIFEST
           sed -i '/<application/i \    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />' $MANIFEST
-          
-          if ! grep -q 'android:exported="true"' $MANIFEST; then
-            sed -i 's/android:name=".MainActivity"/android:name=".MainActivity"\n            android:exported="true"/' $MANIFEST
-          fi
 
-      # 3. توليد ملفات C++ (محرك التمزيق 7 تمريرات)
+      # 3. توليد ملفات C++
       - name: Generate C++ and CMake Files
         run: |
           mkdir -p android/app/src/main/cpp
-          
           cat > android/app/src/main/cpp/CMakeLists.txt << 'EOF'
           cmake_minimum_required(VERSION 3.22.1)
           project("iron_core")
@@ -114,7 +114,7 @@ jobs:
           }
           EOF
 
-      # 4. توليد ملفات Kotlin (NativeCore و MainActivity)
+      # 4. توليد ملفات Kotlin (يجب أن تتطابق الحزمة مع ما سبق)
       - name: Generate Kotlin Files
         run: |
           mkdir -p android/app/src/main/kotlin/com/example/ironvault
@@ -170,7 +170,6 @@ jobs:
           if [ -n "$APP_GRADLE" ]; then
             sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' "$APP_GRADLE"
             sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' "$APP_GRADLE"
-            sed -i 's/compileSdkVersion 34/compileSdkVersion 36/g' "$APP_GRADLE"
             
             if ! grep -q "externalNativeBuild" "$APP_GRADLE"; then
               if [[ "$APP_GRADLE" == *.kts ]]; then
@@ -199,11 +198,11 @@ jobs:
             fi
           fi
 
-      # 7. بناء نسخة Release
+      # 7. بناء التطبيق
       - name: Build Release APK
         run: flutter build apk --release
 
-      # 8. رفع الملف الناتج
+      # 8. رفع الملف
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
