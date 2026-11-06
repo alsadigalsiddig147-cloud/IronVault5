@@ -31,12 +31,21 @@ jobs:
           rm -rf android
           flutter create . --platforms=android --project-name iron_vault
 
-      # 2. توليد محرك C++ (المحدث للتعامل مع الملفات الكبيرة) وملفات Kotlin
+      # 2. إضافة صلاحيات الوصول للملفات (لحفظ الملفات في التنزيلات)
+      - name: Patch AndroidManifest for Storage Permissions
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          # إضافة صلاحية إدارة جميع الملفات (MANAGE_EXTERNAL_STORAGE)
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />' $MANIFEST
+          # إضافة صلاحيات القراءة والكتابة التقليدية
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />' $MANIFEST
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />' $MANIFEST
+
+      # 3. توليد محرك C++ (المحدث للتعامل مع الملفات الكبيرة) وملفات Kotlin
       - name: Generate C++ and Kotlin Files
         run: |
           mkdir -p android/app/src/main/cpp
           
-          # إنشاء ملف CMakeLists.txt
           cat > android/app/src/main/cpp/CMakeLists.txt << 'EOF'
           cmake_minimum_required(VERSION 3.22.1)
           project("iron_core")
@@ -45,7 +54,6 @@ jobs:
           target_link_libraries(iron_core ${log-lib})
           EOF
           
-          # إنشاء ملف iron_core.cpp (النسخة الذكية للتمزيق التدفقي)
           cat > android/app/src/main/cpp/iron_core.cpp << 'EOF'
           #include <jni.h>
           #include <string>
@@ -95,7 +103,6 @@ jobs:
           }
           EOF
 
-          # إنشاء جسر Kotlin
           mkdir -p android/app/src/main/kotlin/com/example/ironvault
           cat > android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt << 'EOF'
           package com.example.ironvault
@@ -105,11 +112,11 @@ jobs:
           }
           EOF
 
-      # 3. جلب المكتبات
+      # 4. جلب المكتبات (بما فيها cryptography_flutter)
       - name: Get Dependencies
         run: flutter pub get
 
-      # 4. إصلاح توافق الإصدارات وربط CMake تلقائياً
+      # 5. إصلاح توافق الإصدارات وربط CMake تلقائياً
       - name: Patch Gradle and Link CMake
         run: |
           APP_GRADLE=""
@@ -118,12 +125,10 @@ jobs:
 
           if [ -n "$APP_GRADLE" ]; then
             echo "Patching $APP_GRADLE..."
-            # إجبار compileSdk على الإصدار 36
             sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' "$APP_GRADLE"
             sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' "$APP_GRADLE"
             sed -i 's/compileSdkVersion 34/compileSdkVersion 36/g' "$APP_GRADLE"
             
-            # ربط CMake
             if ! grep -q "externalNativeBuild" "$APP_GRADLE"; then
               if [[ "$APP_GRADLE" == *.kts ]]; then
                 sed -i '/android {/a \    externalNativeBuild {\n        cmake {\n            path = file("src/main/cpp/CMakeLists.txt")\n        }\n    }' "$APP_GRADLE"
@@ -133,7 +138,6 @@ jobs:
             fi
           fi
 
-          # إجبار كل الإضافات الفرعية على استخدام SDK 36
           ROOT_GRADLE="android/build.gradle"
           if [ -f "$ROOT_GRADLE" ]; then
             if ! grep -q "subprojects {" "$ROOT_GRADLE"; then
@@ -152,11 +156,11 @@ jobs:
             fi
           fi
 
-      # 5. بناء التطبيق النهائي
+      # 6. بناء التطبيق النهائي
       - name: Build Standalone Debug APK
         run: flutter build apk --debug
 
-      # 6. رفع ملف الـ APK
+      # 7. رفع ملف الـ APK
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
