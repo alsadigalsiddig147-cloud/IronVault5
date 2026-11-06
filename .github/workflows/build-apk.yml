@@ -25,13 +25,21 @@ jobs:
         with:
           channel: 'stable'
 
-      # إجبار Flutter على استخدام اسم صالح (أحرف صغيرة فقط) بغض النظر عن اسم المستودع
+      # 1. إنشاء ملفات الأندرويد الأساسية (مثل gradlew) دون المساس بملفات C++ التي أنشأناها
       - name: Create Android Project Files
         run: flutter create . --platforms=android --project-name iron_vault
+
+      # 2. التأكد من أن Gradle مرتبط بـ CMake (في حال قام Flutter بإنشاء build.gradle جديد)
+      - name: Link CMake to Gradle
+        run: |
+          if ! grep -q "externalNativeBuild" android/app/build.gradle; then
+            sed -i '/android {/a \    externalNativeBuild {\n        cmake {\n            path "src/main/cpp/CMakeLists.txt"\n        }\n    }' android/app/build.gradle
+          fi
 
       - name: Get Dependencies
         run: flutter pub get
 
+      # 3. بناء التطبيق (سيقوم ببناء C++ تلقائياً بفضل إعدادات Gradle)
       - name: Build Standalone Debug APK
         run: flutter build apk --debug
 
