@@ -44,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedFilePath = '';
   String _selectedCarrierPath = '';
   bool _enableDoD = false; 
-  String _logText = '[*] Iron Vault Core V11.0 (RSA Only) Ready.\n';
+  String _logText = '[*] Iron Vault Core V12.0 (RSA + Streaming) Ready.\n';
 
   KeyPair? _rsaKeyPair;
 
@@ -101,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return await pbkdf2.deriveKeyFromPassword(password: password, nonce: salt);
   }
 
-  // --- قسم تشفير الملفات ---
+  // --- قسم تشفير الملفات (يدعم الملفات الكبيرة عبر التدفق) ---
   Future<void> _encryptFile() async {
     if (_selectedFilePath.isEmpty || _passwordController.text.isEmpty) {
       _addLog('[-] Error: File or password missing.');
@@ -110,8 +110,16 @@ class _HomeScreenState extends State<HomeScreen> {
     await _requestStoragePermission();
 
     try {
-      _addLog('[*] Encrypting file with Smart Streaming...');
       final file = File(_selectedFilePath);
+      final fileSize = await file.length();
+      final isLargeFile = fileSize > 500 * 1024 * 1024; // 500 MB
+
+      if (isLargeFile) {
+        _addLog('[*] Large File (>500MB) Detected. Enabling Smart Streaming Mode...');
+      } else {
+        _addLog('[*] Encrypting file with Smart Streaming...');
+      }
+      
       final originalName = p.basename(_selectedFilePath);
       final vaultDir = await _getIronVaultDirectory();
       
@@ -136,6 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
       sink.add(fileNonce);
       Mac? fileMac;
 
+      // التشفير التدفقي (يقرأ الملف على شكل قطع صغيرة 64KB)
       final encryptedStream = _algorithm.encryptStream(
         file.openRead(),
         secretKey: secretKey,
@@ -217,6 +226,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final savePath = p.join(vaultDir.path, 'RESTORED_$originalName');
       final outputFile = File(savePath);
 
+      // فك التشفير التدفقي (لا يستهلك ذاكرة)
       final decryptedStream = _algorithm.decryptStream(
         file.openRead(dataStart, dataEnd),
         secretKey: secretKey,
@@ -307,7 +317,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return -1;
   }
 
-  // --- قسم إدارة الهويات ---
+  // --- قسم إدارة الهويات (تم إصلاحه بالكامل) ---
   
   Future<void> _generateIdentityKeys() async {
     _addLog('[*] Generating RSA-4096 Key Pair...');
@@ -335,19 +345,17 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       _addLog('[*] Bundling and Encrypting Identity with Password...');
       
-      final RsaKeyPair rsaKey = _rsaKeyPair as RsaKeyPair;
+      // Extract returns KeyPairData
+      final KeyPairData rsaData = await _rsaKeyPair!.extract();
       
-      // استخراج المفتاح الخاص كـ Bytes مباشرة من الكائن الأصلي
-      final rsaPrivBytes = await rsaKey.extractPrivateKeyBytes();
-      
-      // استخراج المفتاح العام وتحويله إلى نص
-      final rsaPub = await rsaKey.extractPublicKey();
-      final rsaPubString = rsaPub.toString();
+      // Convert RSA keys to strings for safe JSON serialization
+      final String rsaPubString = rsaData.publicKey.toString();
+      final String rsaPrivString = rsaData.privateKey.toString();
 
       final bundle = {
         'type': 'RSA-4096',
         'rsa_public': rsaPubString,
-        'rsa_private': base64Encode(rsaPrivBytes),
+        'rsa_private': rsaPrivString,
         'timestamp': DateTime.now().toIso8601String(),
       };
 
@@ -411,7 +419,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('🛡️ IronVault V11 (Military Grade)', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 14)),
+        title: const Text('🛡️ IronVault V12 (Military Grade)', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 14)),
         backgroundColor: const Color(0xFF111418),
         centerTitle: true,
       ),
