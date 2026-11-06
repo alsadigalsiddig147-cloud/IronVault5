@@ -2,7 +2,7 @@
     package="com.example.ironvault">
 
     <application
-        android:label="ironvault"
+        android:label="iron_vault"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
