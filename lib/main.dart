@@ -44,10 +44,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedFilePath = '';
   String _selectedCarrierPath = '';
   bool _enableDoD = false; 
-  String _logText = '[*] Iron Vault Core V15.0 Ready.\n';
+  String _logText = '[*] Iron Vault Core V16.0 (Stable) Ready.\n';
 
   RsaKeyPair? _rsaKeyPair;
-
   final _algorithm = AesGcm.with256bits();
   static const _platform = MethodChannel('com.ironvault.app/native');
 
@@ -121,7 +120,6 @@ class _HomeScreenState extends State<HomeScreen> {
       
       final originalName = p.basename(_selectedFilePath);
       final vaultDir = await _getIronVaultDirectory();
-      
       final randomName = _generateRandomName();
       final savePath = p.join(vaultDir.path, '$randomName.iron');
       final outputFile = File(savePath);
@@ -339,15 +337,10 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       _addLog('[*] Bundling and Encrypting Identity with Password...');
       
-      // الحل الجذري: استخدم extract() للحصول على RsaKeyPairData ثم المكونات
+      // إصلاح جذري: استخراج المعامل الخاص (d) والمفتاح العام
       final RsaKeyPairData rsaData = await _rsaKeyPair!.extract();
-      
-      // المفتاح الخاص في RSA يتم تمثيله بالمعامل d
       final rsaPrivBytes = rsaData.d; 
-      
-      // المفتاح العام
-      final rsaPub = rsaData.publicKey;
-      final rsaPubString = rsaPub.toString();
+      final rsaPubString = rsaData.publicKey.toString();
 
       final bundle = {
         'type': 'RSA-4096',
@@ -357,7 +350,6 @@ class _HomeScreenState extends State<HomeScreen> {
       };
 
       final jsonStr = jsonEncode(bundle);
-      
       final salt = _algorithm.newNonce();
       final secretKey = await _deriveKey(_identityPasswordController.text, salt);
       final encryptedBundle = await _algorithm.encrypt(utf8.encode(jsonStr), secretKey: secretKey);
@@ -416,7 +408,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('🛡️ IronVault V15 (Military Grade)', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 14)),
+        title: const Text('🛡️ IronVault V16 (Military Grade)', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 14)),
         backgroundColor: const Color(0xFF111418),
         centerTitle: true,
       ),
