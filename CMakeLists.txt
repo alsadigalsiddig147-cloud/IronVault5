@@ -6,7 +6,7 @@ add_library(
     iron_core
     SHARED
     iron_core.cpp
-)
+).
 
 find_library(
     log-lib
