@@ -24,10 +24,10 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          flutter-version: '3.19.x'
 
+      # إجبار Flutter على استخدام اسم صالح (أحرف صغيرة فقط) بغض النظر عن اسم المستودع
       - name: Create Android Project Files
-        run: flutter create . --platforms=android
+        run: flutter create . --platforms=android --project-name iron_vault
 
       - name: Get Dependencies
         run: flutter pub get
