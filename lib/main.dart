@@ -44,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedFilePath = '';
   String _selectedCarrierPath = '';
   bool _enableDoD = false; 
-  String _logText = '[*] Iron Vault Core V10.8 (RSA Only) Ready.\n';
+  String _logText = '[*] Iron Vault Core V10.9 (RSA Only) Ready.\n';
 
   KeyPair? _rsaKeyPair;
 
@@ -335,17 +335,19 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       _addLog('[*] Bundling and Encrypting Identity with Password...');
       
-      // الحل الجذري: تحويل النوع إلى RsaKeyPairData لكي يتعرف على الخصائص
+      // الحل الجذري: تحويل النوع إلى RsaKeyPair لكي يتعرف على الخصائص
       final RsaKeyPair rsaKey = _rsaKeyPair as RsaKeyPair;
       final RsaKeyPairData rsaData = await rsaKey.extract();
 
       // الآن يمكننا الوصول إلى المفاتيح بدون أي أخطاء
       final rsaPrivBytes = rsaData.privateKeyBytes;
-      final rsaPubBytes = rsaData.publicKey.bytes;
+      
+      // RsaPublicKey لا يحتوي على .bytes، لذلك نستخدم toString()
+      final rsaPubString = rsaData.publicKey.toString();
 
       final bundle = {
         'type': 'RSA-4096',
-        'rsa_public': base64Encode(rsaPubBytes),
+        'rsa_public': rsaPubString,
         'rsa_private': base64Encode(rsaPrivBytes),
         'timestamp': DateTime.now().toIso8601String(),
       };
@@ -399,7 +401,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       _addLog('[✓] Identity Decrypted Successfully!');
       _addLog('[+] Type: ${decodedJson['type']}');
-      _addLog('[+] RSA Key loaded (${decodedJson['rsa_public'].length} bytes)');
+      _addLog('[+] RSA Key loaded successfully.');
       
     } catch (e) {
       _addLog('[-] Import Error: Wrong password or corrupted file.');
