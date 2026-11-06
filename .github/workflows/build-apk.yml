@@ -25,29 +25,26 @@ jobs:
         with:
           channel: 'stable'
 
-      # 1. مسح مجلد الأندرويد القديم وإنشاء واحد جديد ونظيف
+      # 1. مسح مجلد الأندرويد القديم وإنشاء واحد جديد
       - name: Recreate Standard Android Project
         run: |
           rm -rf android
           flutter create . --platforms=android --project-name iron_vault
 
-      # 2. إضافة الصلاحيات وضبط AndroidManifest لمنع فشل التثبيت
+      # 2. إضافة الصلاحيات وضبط AndroidManifest
       - name: Patch AndroidManifest for Permissions and Exported
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
-          
-          # إضافة صلاحيات التخزين
           sed -i '/<application/i \    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />' $MANIFEST
           sed -i '/<application/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />' $MANIFEST
           sed -i '/<application/i \    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />' $MANIFEST
           
-          # التأكد من وجود android:exported="true" (ضروري جداً لأندرويد 12+)
           if ! grep -q 'android:exported="true"' $MANIFEST; then
             sed -i 's/android:name=".MainActivity"/android:name=".MainActivity"\n            android:exported="true"/' $MANIFEST
           fi
 
-      # 3. توليد ملفات C++ و Kotlin (محرك التمزيق العسكري)
-      - name: Generate C++ and Kotlin Files
+      # 3. توليد ملفات C++ (محرك التمزيق 7 تمريرات)
+      - name: Generate C++ and CMake Files
         run: |
           mkdir -p android/app/src/main/cpp
           
@@ -66,6 +63,7 @@ jobs:
           #include <fstream>
           #include <android/log.h>
           #include <algorithm>
+          #include <random>
 
           #define LOG_TAG "IronVaultCore"
           #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -74,7 +72,7 @@ jobs:
               JNIEXPORT jboolean JNICALL
               Java_com_example_ironvault_NativeCore_nativeWipe(JNIEnv *env, jobject thiz, jstring path) {
                   const char *nativePath = env->GetStringUTFChars(path, 0);
-                  LOGI("Executing DoD 5220.22-M Secure Wipe: %s", nativePath);
+                  LOGI("Executing DoD 5220.22-M (7-Pass) Secure Wipe: %s", nativePath);
                   
                   std::fstream file(nativePath, std::ios::binary | std::ios::in | std::ios::out);
                   if (file.is_open()) {
@@ -85,9 +83,17 @@ jobs:
                       const std::streamsize CHUNK_SIZE = 64 * 1024; 
                       std::vector<char> buffer(CHUNK_SIZE);
 
-                      for (int pass = 0; pass < 3; ++pass) {
-                          char fillChar = (pass == 0) ? 0x00 : ((pass == 1) ? 0xFF : 0x55);
-                          std::fill(buffer.begin(), buffer.end(), fillChar);
+                      for (int pass = 0; pass < 7; ++pass) {
+                          if (pass == 0) std::fill(buffer.begin(), buffer.end(), 0x00);
+                          else if (pass == 1) std::fill(buffer.begin(), buffer.end(), 0xFF);
+                          else if (pass == 2) std::fill(buffer.begin(), buffer.end(), 0x55);
+                          else if (pass == 3) std::fill(buffer.begin(), buffer.end(), 0xAA);
+                          else {
+                              std::random_device rd;
+                              std::mt19937 gen(rd());
+                              std::uniform_int_distribution<> dis(0, 255);
+                              for (auto &c : buffer) c = static_cast<char>(dis(gen));
+                          }
                           
                           file.seekp(0, std::ios::beg);
                           std::streamsize remaining = fileSize;
@@ -108,7 +114,11 @@ jobs:
           }
           EOF
 
+      # 4. توليد ملفات Kotlin (NativeCore و MainActivity)
+      - name: Generate Kotlin Files
+        run: |
           mkdir -p android/app/src/main/kotlin/com/example/ironvault
+          
           cat > android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt << 'EOF'
           package com.example.ironvault
           object NativeCore {
@@ -117,11 +127,40 @@ jobs:
           }
           EOF
 
-      # 4. جلب المكتبات
+          cat > android/app/src/main/kotlin/com/example/ironvault/MainActivity.kt << 'EOF'
+          package com.example.ironvault
+
+          import io.flutter.embedding.android.FlutterActivity
+          import io.flutter.embedding.engine.FlutterEngine
+          import io.flutter.plugin.common.MethodChannel
+
+          class MainActivity: FlutterActivity() {
+              private val CHANNEL = "com.ironvault.app/native"
+
+              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+                  super.configureFlutterEngine(flutterEngine)
+                  MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
+                      call, result ->
+                      if (call.method == "nativeWipe") {
+                          val path = call.argument<String>("path")
+                          if (path != null) {
+                              result.success(NativeCore.nativeWipe(path))
+                          } else {
+                              result.error("UNAVAILABLE", "Path not found", null)
+                          }
+                      } else {
+                          result.notImplemented()
+                      }
+                  }
+              }
+          }
+          EOF
+
+      # 5. جلب المكتبات
       - name: Get Dependencies
         run: flutter pub get
 
-      # 5. إصلاح إصدارات Gradle وربط CMake
+      # 6. إصلاح إصدارات Gradle وربط CMake
       - name: Patch Gradle and Link CMake
         run: |
           APP_GRADLE=""
@@ -160,11 +199,11 @@ jobs:
             fi
           fi
 
-      # 6. بناء نسخة Release الشاملة (Universal) - تحتوي على كل الميزات وكل معماريات المعالجات
+      # 7. بناء نسخة Release
       - name: Build Release APK
         run: flutter build apk --release
 
-      # 7. رفع الملف الناتج
+      # 8. رفع الملف الناتج
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
