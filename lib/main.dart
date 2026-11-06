@@ -44,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedFilePath = '';
   String _selectedCarrierPath = '';
   bool _enableDoD = false; 
-  String _logText = '[*] Iron Vault Core V10.9 (RSA Only) Ready.\n';
+  String _logText = '[*] Iron Vault Core V11.0 (RSA Only) Ready.\n';
 
   KeyPair? _rsaKeyPair;
 
@@ -307,7 +307,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return -1;
   }
 
-  // --- قسم إدارة الهويات (تم إصلاح الخطأ) ---
+  // --- قسم إدارة الهويات ---
   
   Future<void> _generateIdentityKeys() async {
     _addLog('[*] Generating RSA-4096 Key Pair...');
@@ -335,15 +335,14 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       _addLog('[*] Bundling and Encrypting Identity with Password...');
       
-      // الحل الجذري: تحويل النوع إلى RsaKeyPair لكي يتعرف على الخصائص
       final RsaKeyPair rsaKey = _rsaKeyPair as RsaKeyPair;
-      final RsaKeyPairData rsaData = await rsaKey.extract();
-
-      // الآن يمكننا الوصول إلى المفاتيح بدون أي أخطاء
-      final rsaPrivBytes = rsaData.privateKeyBytes;
       
-      // RsaPublicKey لا يحتوي على .bytes، لذلك نستخدم toString()
-      final rsaPubString = rsaData.publicKey.toString();
+      // استخراج المفتاح الخاص كـ Bytes مباشرة من الكائن الأصلي
+      final rsaPrivBytes = await rsaKey.extractPrivateKeyBytes();
+      
+      // استخراج المفتاح العام وتحويله إلى نص
+      final rsaPub = await rsaKey.extractPublicKey();
+      final rsaPubString = rsaPub.toString();
 
       final bundle = {
         'type': 'RSA-4096',
@@ -412,7 +411,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('🛡️ IronVault V10 (Military Grade)', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 14)),
+        title: const Text('🛡️ IronVault V11 (Military Grade)', style: TextStyle(color: Color(0xFFD4AF37), fontSize: 14)),
         backgroundColor: const Color(0xFF111418),
         centerTitle: true,
       ),
