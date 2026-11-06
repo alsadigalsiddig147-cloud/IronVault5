@@ -26,10 +26,14 @@ jobs:
         channel: 'stable'
         flutter-version: '3.19.x'
 
-    - name: Get Dependencies and Build APK
+    - name: Generate Android Scaffolding & Build APK
       run: |
+        # توليد هيكل أندرويد الحديث المتوافق مع v2 embedding تلقائياً
+        flutter create . --org com.ironvault --project-name iron_vault --platforms android
+        
+        # جلب الاعتماديات وبناء الـ APK
         flutter pub get
-        flutter build apk --debug --no-pub
+        flutter build apk --debug
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
