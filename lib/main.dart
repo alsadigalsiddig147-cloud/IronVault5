@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
-import 'package:file_picker/file_picker.dart';
 
 void main() {
   runApp(const IronVaultApp());
@@ -33,7 +32,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   
-  // حقول التحكم
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _identityPasswordController = TextEditingController();
   
@@ -47,7 +45,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // اختيار ملف من مسار الجهاز الحقيقي
   Future<void> _pickFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles();
     if (result != null && result.files.single.path != null) {
@@ -60,14 +57,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // توليد المفاتيح (RSA-4096 أو البيضاوية ECC)
   void _generateIdentityKeys() {
     _addLog('[*] Generating high-security $_selectedKeyType Identity Keys...');
-    // محاكاة التوليد عبر محرك C++ الأساسي
     _addLog('[✓] $_selectedKeyType Keys Generated & Securely Stored.');
   }
 
-  // تصدير الهوية مشفرة
   void _exportIdentity() {
     if (_identityPasswordController.text.isEmpty) {
       _addLog('[-] Error: Password required to export identity.');
@@ -77,7 +71,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _addLog('[✓] Identity exported successfully to secure storage.');
   }
 
-  // استيراد الهوية
   void _importIdentity() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles();
     if (result != null) {
@@ -86,7 +79,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // حذف الهوية بكلمة المرور
   void _wipeIdentity() {
     if (_identityPasswordController.text.isEmpty) {
       _addLog('[-] Error: Enter password to authorize identity wipe.');
@@ -97,7 +89,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _identityPasswordController.clear();
   }
 
-  // عملية التشفير وفك التشفير للملفات المختارة
   void _processFileEncryption(bool encrypt) {
     if (_selectedFilePath.isEmpty) {
       _addLog('[-] Error: Please select a target file first.');
@@ -125,7 +116,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
-          // شاشة السجلات السيبرانية
           Container(
             height: 110,
             margin: const EdgeInsets.all(8),
@@ -146,14 +136,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-          
-          // محتوى التبويبات المتعددة
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12.0),
               child: _currentIndex == 0 
-                  ? _buildFileVaultTab()       // تبويب اختيار الملفات والتشفير
-                  : _buildIdentityManagerTab(),  // تبويب الهويات وتوليد المفاتيح (RSA / ECC)
+                  ? _buildFileVaultTab()
+                  : _buildIdentityManagerTab(),
             ),
           ),
         ],
@@ -172,7 +160,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // واجهة تبويب الملفات واختيارها من الجهاز
   Widget _buildFileVaultTab() {
     return ListView(
       children: [
@@ -233,7 +220,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // واجهة تبويب إدارة الهويات وتوليد مفاتيح RSA-4096 والمنحنيات البيضاوية ECC
   Widget _buildIdentityManagerTab() {
     return ListView(
       children: [
