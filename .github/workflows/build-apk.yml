@@ -25,27 +25,26 @@ jobs:
         with:
           channel: 'stable'
 
-      # 1. إنشاء مشروع أندرويد قياسي ونظيف لضمان وجود ملفات Gradle
       - name: Recreate Standard Android Project
         run: |
           rm -rf android
           flutter create . --platforms=android --project-name iron_vault
 
-      # 2. إضافة صلاحيات الوصول للملفات (لحفظ الملفات في التنزيلات)
-      - name: Patch AndroidManifest for Storage Permissions
+      # إصلاح: إضافة android:exported إلى MainActivity في AndroidManifest
+      - name: Fix AndroidManifest (exported attribute)
         run: |
           MANIFEST="android/app/src/main/AndroidManifest.xml"
-          # إضافة صلاحية إدارة جميع الملفات (MANAGE_EXTERNAL_STORAGE)
+          # استبدال سطر activity الرئيسي لضمان وجود android:exported="true"
+          sed -i 's/<activity android:name=".MainActivity"/<activity android:name=".MainActivity" android:exported="true"/' $MANIFEST
+          # إضافة صلاحيات التخزين
           sed -i '/<application/i \    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />' $MANIFEST
-          # إضافة صلاحيات القراءة والكتابة التقليدية
           sed -i '/<application/i \    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />' $MANIFEST
           sed -i '/<application/i \    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />' $MANIFEST
 
-      # 3. توليد محرك C++ (المحدث للتعامل مع الملفات الكبيرة) وملفات Kotlin
+      # توليد ملفات C++ و Kotlin (نفس الكود السابق)
       - name: Generate C++ and Kotlin Files
         run: |
           mkdir -p android/app/src/main/cpp
-          
           cat > android/app/src/main/cpp/CMakeLists.txt << 'EOF'
           cmake_minimum_required(VERSION 3.22.1)
           project("iron_core")
@@ -53,7 +52,6 @@ jobs:
           find_library(log-lib log)
           target_link_libraries(iron_core ${log-lib})
           EOF
-          
           cat > android/app/src/main/cpp/iron_core.cpp << 'EOF'
           #include <jni.h>
           #include <string>
@@ -61,32 +59,25 @@ jobs:
           #include <fstream>
           #include <android/log.h>
           #include <algorithm>
-
           #define LOG_TAG "IronVaultCore"
           #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-
           extern "C" {
               JNIEXPORT jboolean JNICALL
               Java_com_example_ironvault_NativeCore_nativeWipe(JNIEnv *env, jobject thiz, jstring path) {
                   const char *nativePath = env->GetStringUTFChars(path, 0);
                   LOGI("Executing DoD 5220.22-M Secure Wipe: %s", nativePath);
-                  
                   std::fstream file(nativePath, std::ios::binary | std::ios::in | std::ios::out);
                   if (file.is_open()) {
                       file.seekg(0, std::ios::end);
                       std::streamsize fileSize = file.tellg();
                       file.seekg(0, std::ios::beg);
-
                       const std::streamsize CHUNK_SIZE = 64 * 1024; 
                       std::vector<char> buffer(CHUNK_SIZE);
-
                       for (int pass = 0; pass < 3; ++pass) {
                           char fillChar = (pass == 0) ? 0x00 : ((pass == 1) ? 0xFF : 0x55);
                           std::fill(buffer.begin(), buffer.end(), fillChar);
-                          
                           file.seekp(0, std::ios::beg);
                           std::streamsize remaining = fileSize;
-                          
                           while (remaining > 0) {
                               std::streamsize to_write = std::min(CHUNK_SIZE, remaining);
                               file.write(buffer.data(), to_write);
@@ -102,7 +93,6 @@ jobs:
               }
           }
           EOF
-
           mkdir -p android/app/src/main/kotlin/com/example/ironvault
           cat > android/app/src/main/kotlin/com/example/ironvault/NativeCore.kt << 'EOF'
           package com.example.ironvault
@@ -112,23 +102,18 @@ jobs:
           }
           EOF
 
-      # 4. جلب المكتبات (بما فيها cryptography_flutter)
       - name: Get Dependencies
         run: flutter pub get
 
-      # 5. إصلاح توافق الإصدارات وربط CMake تلقائياً
       - name: Patch Gradle and Link CMake
         run: |
           APP_GRADLE=""
           if [ -f "android/app/build.gradle.kts" ]; then APP_GRADLE="android/app/build.gradle.kts"; 
           elif [ -f "android/app/build.gradle" ]; then APP_GRADLE="android/app/build.gradle"; fi
-
           if [ -n "$APP_GRADLE" ]; then
-            echo "Patching $APP_GRADLE..."
             sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' "$APP_GRADLE"
             sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' "$APP_GRADLE"
             sed -i 's/compileSdkVersion 34/compileSdkVersion 36/g' "$APP_GRADLE"
-            
             if ! grep -q "externalNativeBuild" "$APP_GRADLE"; then
               if [[ "$APP_GRADLE" == *.kts ]]; then
                 sed -i '/android {/a \    externalNativeBuild {\n        cmake {\n            path = file("src/main/cpp/CMakeLists.txt")\n        }\n    }' "$APP_GRADLE"
@@ -137,12 +122,10 @@ jobs:
               fi
             fi
           fi
-
           ROOT_GRADLE="android/build.gradle"
           if [ -f "$ROOT_GRADLE" ]; then
             if ! grep -q "subprojects {" "$ROOT_GRADLE"; then
               cat << 'EOF' >> "$ROOT_GRADLE"
-
           subprojects {
               afterEvaluate { project ->
                   if (project.hasProperty('android')) {
@@ -156,13 +139,12 @@ jobs:
             fi
           fi
 
-      # 6. بناء التطبيق النهائي
-      - name: Build Standalone Debug APK
-        run: flutter build apk --debug
+      # التغيير الأهم: بناء نسخة release بدلاً من debug
+      - name: Build Release APK
+        run: flutter build apk --release
 
-      # 7. رفع ملف الـ APK
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ironvault-flutter-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: ironvault-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
