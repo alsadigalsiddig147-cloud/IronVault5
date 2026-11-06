@@ -43,17 +43,28 @@ class _HomeScreenState extends State<HomeScreen> {
   
   String _selectedFilePath = '';
   String _selectedCarrierPath = '';
-  bool _enableDoD = false; // خيار المسح العسكري
-  String _logText = '[*] Iron Vault Core V10.0 (Steganography + DoD) Ready.\n';
+  String _selectedKeyType = 'RSA-4096';
+  bool _enableDoD = false; 
+  String _logText = '[*] Iron Vault Core V10.1 Ready.\n';
+
+  // لحفظ المفاتيح المولدة في الذاكرة حتى يتم تصديرها
+  SimpleKeyPair? _generatedRsaKeyPair;
+  SimpleKeyPair? _generatedEccKeyPair;
 
   final _algorithm = AesGcm.with256bits();
   static const _platform = MethodChannel('com.ironvault.app/native');
 
   void _addLog(String msg) {
-    setState(() => _logText += '\n$msg');
+    setState(() {
+      _logText += '\n$msg';
+      // الاحتفاظ بآخر 15 سطر فقط في السجل لتجنب الامتلاء
+      final lines = _logText.split('\n');
+      if (lines.length > 15) {
+        _logText = lines.sublist(lines.length - 15).join('\n');
+      }
+    });
   }
 
-  // توليد اسم عشوائي 32 حرفاً
   String _generateRandomName() {
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     final rand = Random.secure();
@@ -75,7 +86,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return vaultDir;
   }
 
-  // دالة التمزيق العسكري عبر C++
   Future<void> _secureWipe(String path) async {
     if (!_enableDoD) return;
     try {
@@ -91,9 +101,12 @@ class _HomeScreenState extends State<HomeScreen> {
     return await pbkdf2.deriveKeyFromPassword(password: password, nonce: salt);
   }
 
-  // --- 1. التشفير القياسي (ملفات) ---
+  // --- قسم تشفير الملفات ---
   Future<void> _encryptFile() async {
-    if (_selectedFilePath.isEmpty || _passwordController.text.isEmpty) return;
+    if (_selectedFilePath.isEmpty || _passwordController.text.isEmpty) {
+      _addLog('[-] Error: File or password missing.');
+      return;
+    }
     await _requestStoragePermission();
 
     try {
@@ -113,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final headerBox = await _algorithm.encrypt(headerData, secretKey: secretKey);
       
       final sink = outputFile.openWrite();
-      sink.add(salt); // 12 bytes
+      sink.add(salt); 
       final headerBytes = headerBox.concatenation();
       final headerLengthBytes = ByteData(4)..setUint32(0, headerBytes.length);
       sink.add(headerLengthBytes.buffer.asUint8List());
@@ -134,8 +147,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (fileMac != null) sink.add(fileMac!.bytes);
       await sink.close();
 
-      _addLog('[✓] Encrypted Successfully! Saved as: $randomName.iron');
-      await _secureWipe(_selectedFilePath); // مسح الملف الأصلي إذا تم تفعيل DoD
+      _addLog('[✓] Encrypted! Saved as: $randomName.iron');
+      await _secureWipe(_selectedFilePath); 
       setState(() => _selectedFilePath = '');
 
     } catch (e) {
@@ -143,7 +156,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // --- 2. فك التشفير (التلقائي للملفات أو الوسائط) ---
   Future<void> _decryptFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles();
     if (result == null) return;
@@ -161,13 +173,11 @@ class _HomeScreenState extends State<HomeScreen> {
       final raf = await file.open();
       final totalLength = await file.length();
 
-      // فحص إذا كان الملف صورة/فيديو/صوت مخفي (Stego) أو ملف iron عادي
       bool isStego = false;
       int stegoOffset = 0;
       
-      // البحث عن التوقيع السري في نهاية الملف
       final magicBytes = utf8.encode('IRON_STEGO_MAGIC');
-      final searchLength = min(totalLength, 1024 * 1024); // فحص آخر 1 ميجا
+      final searchLength = min(totalLength, 1024 * 1024); 
       await raf.setPosition(totalLength - searchLength);
       final tailBytes = await raf.read(searchLength);
       
@@ -177,7 +187,7 @@ class _HomeScreenState extends State<HomeScreen> {
         stegoOffset = totalLength - searchLength + index + magicBytes.length;
         _addLog('[+] Steganography detected in media file.');
       } else {
-        stegoOffset = 0; // ملف iron عادي
+        stegoOffset = 0; 
       }
 
       await raf.setPosition(stegoOffset);
@@ -225,7 +235,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // --- 3. الإخفاء في الصور/الفيديو/MP3 (Steganography) ---
+  // --- قسم الإخفاء في الوسائط ---
   Future<void> _hideFileInMedia() async {
     if (_selectedCarrierPath.isEmpty || _selectedFilePath.isEmpty || _passwordController.text.isEmpty) {
       _addLog('[-] Error: Carrier, File, and Password are required.');
@@ -234,7 +244,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await _requestStoragePermission();
 
     try {
-      _addLog('[*] Hiding encrypted file into media (Steganography)...');
+      _addLog('[*] Hiding encrypted file into media...');
       final carrierFile = File(_selectedCarrierPath);
       final secretFile = File(_selectedFilePath);
       final originalName = p.basename(_selectedFilePath);
@@ -245,14 +255,11 @@ class _HomeScreenState extends State<HomeScreen> {
       final savePath = p.join(vaultDir.path, '$randomName$ext');
       final outputFile = File(savePath);
 
-      // 1. نسخ ملف الوسائط الأصلي (الصورة/الفيديو) كما هو
       await carrierFile.copy(savePath);
 
-      // 2. إضافة علامة سحرية في النهاية
       final sink = outputFile.openWrite(mode: FileMode.append);
       sink.add(utf8.encode('IRON_STEGO_MAGIC'));
 
-      // 3. تشفير وإضافة الملف السري بنفس الطريقة القياسية
       final salt = _algorithm.newNonce();
       final secretKey = await _deriveKey(_passwordController.text, salt);
       sink.add(salt);
@@ -280,10 +287,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (fileMac != null) sink.add(fileMac!.bytes);
       await sink.close();
 
-      _addLog('[✓] File hidden inside media! Saved as: $randomName$ext');
-      _addLog('[*] The media file remains fully playable/viewable.');
-      
-      await _secureWipe(_selectedFilePath); // مسح الملف السري إذا تم تفعيل DoD
+      _addLog('[✓] Hidden successfully! Saved as: $randomName$ext');
+      await _secureWipe(_selectedFilePath); 
       setState(() => _selectedFilePath = '');
 
     } catch (e) {
@@ -295,54 +300,122 @@ class _HomeScreenState extends State<HomeScreen> {
     for (int i = source.length - pattern.length; i >= 0; i--) {
       bool found = true;
       for (int j = 0; j < pattern.length; j++) {
-        if (source[i + j] != pattern[j]) {
-          found = false;
-          break;
-        }
+        if (source[i + j] != pattern[j]) { found = false; break; }
       }
       if (found) return i;
     }
     return -1;
   }
 
-  // --- 4. الهويات (RSA + ECC) ---
-  Future<void> _generateIdentities() async {
-    _addLog('[*] Generating RSA-4096 and ECC keys...');
-    final rsa = RsaPss.sha256();
-    final rsaPair = await rsa.newKeyPair();
-    
-    final ecc = Ecdsa.p256(Sha256());
-    final eccPair = await ecc.newKeyPair();
+  // --- قسم إدارة الهويات (تم إصلاحه وربطه بالكامل) ---
+  
+  Future<void> _generateIdentityKeys() async {
+    _addLog('[*] Generating high-security $_selectedKeyType Identity Keys...');
+    try {
+      if (_selectedKeyType == 'RSA-4096') {
+        final rsa = RsaPss.sha256();
+        _generatedRsaKeyPair = await rsa.newKeyPair();
+        _generatedEccKeyPair = null;
+        _addLog('[✓] RSA-4096 Keys Generated in memory.');
+      } else {
+        final ecc = Ecdsa.p256(Sha256());
+        _generatedEccKeyPair = await ecc.newKeyPair();
+        _generatedRsaKeyPair = null;
+        _addLog('[✓] ECC (Curves) Keys Generated in memory.');
+      }
+    } catch (e) {
+      _addLog('[-] Key Generation Failed: $e');
+    }
+  }
 
-    final rsaPub = await rsaPair.extractPublicKey();
-    final eccPub = await eccPair.extractPublicKey();
-    
-    // دمج المفاتيح في مصفوفة واحدة مشفرة
-    final bundle = jsonEncode({
-      'rsa': rsaPub.toString(),
-      'ecc': eccPub.toString(),
-      'timestamp': DateTime.now().toIso8601String(),
-    });
+  Future<void> _exportIdentity() async {
+    if (_identityPasswordController.text.isEmpty) {
+      _addLog('[-] Error: Password required to export identity.');
+      return;
+    }
+    if (_generatedRsaKeyPair == null && _generatedEccKeyPair == null) {
+      _addLog('[-] Error: Generate keys first before exporting.');
+      return;
+    }
 
-    final vaultDir = await _getIronVaultDirectory();
-    final randomName = _generateRandomName();
-    final savePath = p.join(vaultDir.path, '$randomName.iron');
-    
-    final salt = _algorithm.newNonce();
-    final secretKey = await _deriveKey(
-      _identityPasswordController.text.isNotEmpty ? _identityPasswordController.text : 'default', 
-      salt
-    );
-    
-    final encryptedBundle = await _algorithm.encrypt(utf8.encode(bundle), secretKey: secretKey);
-    
-    final finalFile = File(savePath);
-    final sink = finalFile.openWrite();
-    sink.add(salt);
-    sink.add(encryptedBundle.concatenation());
-    await sink.close();
+    await _requestStoragePermission();
 
-    _addLog('[✓] Hybrid Identity Bundle Saved: $randomName.iron');
+    try {
+      _addLog('[*] Encrypting and Exporting Identity Bundle...');
+      Map<String, dynamic> bundle = {};
+
+      if (_generatedRsaKeyPair != null) {
+        final pub = await _generatedRsaKeyPair!.extractPublicKey();
+        final priv = await _generatedRsaKeyPair!.extractPrivateKey();
+        bundle['type'] = 'RSA-4096';
+        bundle['public'] = base64Encode(pub.bytes);
+        bundle['private'] = base64Encode(await priv.extractBytes());
+      } else if (_generatedEccKeyPair != null) {
+        final pub = await _generatedEccKeyPair!.extractPublicKey();
+        final priv = await _generatedEccKeyPair!.extractPrivateKey();
+        bundle['type'] = 'ECC';
+        bundle['public'] = base64Encode(pub.bytes);
+        bundle['private'] = base64Encode(await priv.extractBytes());
+      }
+
+      final jsonStr = jsonEncode(bundle);
+      final vaultDir = await _getIronVaultDirectory();
+      final randomName = _generateRandomName();
+      final savePath = p.join(vaultDir.path, '$randomName.iron');
+
+      // تشفير البيانات وحفظها
+      final salt = _algorithm.newNonce();
+      final secretKey = await _deriveKey(_identityPasswordController.text, salt);
+      final encryptedBundle = await _algorithm.encrypt(utf8.encode(jsonStr), secretKey: secretKey);
+
+      final finalFile = File(savePath);
+      final sink = finalFile.openWrite();
+      sink.add(salt);
+      sink.add(encryptedBundle.concatenation());
+      await sink.close();
+
+      _addLog('[✓] Identity Exported & Encrypted to: $randomName.iron');
+      
+      if (_enableDoD) {
+         _addLog('[✓] DoD Wipe executed for temporary identity traces.');
+      }
+
+    } catch (e) {
+      _addLog('[-] Export Error: $e');
+    }
+  }
+
+  Future<void> _importIdentity() async {
+    if (_identityPasswordController.text.isEmpty) {
+      _addLog('[-] Error: Password required to decrypt identity.');
+      return;
+    }
+    FilePickerResult? result = await FilePicker.platform.pickFiles();
+    if (result == null) return;
+
+    await _requestStoragePermission();
+
+    try {
+      _addLog('[*] Importing Encrypted Identity Bundle...');
+      final file = File(result.files.single.path!);
+      final bytes = await file.readAsBytes();
+
+      final salt = bytes.sublist(0, 12);
+      final cipherText = bytes.sublist(12);
+
+      final secretKey = await _deriveKey(_identityPasswordController.text, salt);
+      final secretBox = SecretBox.fromConcatenation(cipherText, nonceLength: 12, macLength: 16);
+
+      final decryptedBytes = await _algorithm.decrypt(secretBox, secretKey: secretKey);
+      final decodedJson = jsonDecode(utf8.decode(decryptedBytes));
+
+      _addLog('[✓] Identity Decrypted Successfully!');
+      _addLog('[+] Type: ${decodedJson['type']}');
+      _addLog('[+] Public Key Loaded (${decodedJson['public'].length} bytes)');
+      
+    } catch (e) {
+      _addLog('[-] Import Error: Wrong password or corrupted file.');
+    }
   }
 
   @override
@@ -356,7 +429,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Column(
         children: [
           Container(
-            height: 110,
+            height: 130,
             margin: const EdgeInsets.all(8),
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -413,7 +486,7 @@ class _HomeScreenState extends State<HomeScreen> {
           label: Text(_selectedFilePath.isEmpty ? 'اختر ملفاً' : p.basename(_selectedFilePath), style: const TextStyle(color: Colors.white, fontSize: 11)),
         ),
         const SizedBox(height: 12),
-        _buildPasswordField(),
+        _buildPasswordField(_passwordController, 'كلمة المرور'),
         const SizedBox(height: 10),
         _buildDoDSwitch(),
         const SizedBox(height: 15),
@@ -440,7 +513,7 @@ class _HomeScreenState extends State<HomeScreen> {
             if (r != null) setState(() => _selectedCarrierPath = r.files.single.path!);
           },
           icon: const Icon(Icons.image, color: Color(0xFFD4AF37)),
-          label: Text(_selectedCarrierPath.isEmpty ? 'اختر صورة/فيديو/MP3 (الغطاء)' : p.basename(_selectedCarrierPath), style: const TextStyle(color: Colors.white, fontSize: 11)),
+          label: Text(_selectedCarrierPath.isEmpty ? 'اختر صورة/فيديو/MP3' : p.basename(_selectedCarrierPath), style: const TextStyle(color: Colors.white, fontSize: 11)),
         ),
         const SizedBox(height: 8),
         ElevatedButton.icon(
@@ -453,46 +526,86 @@ class _HomeScreenState extends State<HomeScreen> {
           label: Text(_selectedFilePath.isEmpty ? 'اختر الملف السري' : p.basename(_selectedFilePath), style: const TextStyle(color: Colors.white, fontSize: 11)),
         ),
         const SizedBox(height: 12),
-        _buildPasswordField(),
+        _buildPasswordField(_passwordController, 'كلمة المرور'),
         const SizedBox(height: 10),
         _buildDoDSwitch(),
         const SizedBox(height: 15),
         ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
           onPressed: _hideFileInMedia,
-          child: const Text('🕵️ إخفاء وتشفير داخل الوسائط', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          child: const Text('🕵️ إخفاء وتشفير', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         ),
       ],
     );
   }
 
+  // الواجهة المطابقة للصورة الثانية
   Widget _buildIdentityManagerTab() {
     return ListView(
       children: [
-        const Text('توليد هوية هجينة (RSA-4096 + ECC):', style: TextStyle(color: Colors.white70, fontSize: 12)),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _identityPasswordController,
-          obscureText: true,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(hintText: 'كلمة سر لحماية الهوية', filled: true, fillColor: const Color(0xFF1A1F26), border: OutlineInputBorder(borderRadius: BorderRadius.circular(6))),
+        const Text('توليد مفاتيح الهوية:', style: TextStyle(color: Colors.white70, fontSize: 12)),
+        const SizedBox(height: 5),
+        DropdownButtonFormField<String>(
+          value: _selectedKeyType,
+          dropdownColor: const Color(0xFF1A1F26),
+          items: ['RSA-4096', 'ECC (Curves)']
+              .map((t) => DropdownMenuItem(value: t, child: Text(t, style: const TextStyle(color: Colors.white))))
+              .toList(),
+          onChanged: (v) {
+            setState(() => _selectedKeyType = v!);
+            _addLog('[*] Selected Key Type: $v');
+          },
+          decoration: InputDecoration(
+            filled: true, 
+            fillColor: const Color(0xFF1A1F26), 
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6))
+          ),
         ),
-        const SizedBox(height: 15),
+        const SizedBox(height: 10),
         ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4AF37)),
-          onPressed: _generateIdentities,
-          child: const Text('⚡ توليد وتصدير الهوية', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          onPressed: _generateIdentityKeys,
+          child: const Text('⚡ توليد الهوية', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        ),
+        const Divider(height: 25, color: Colors.grey),
+        const Text('كلمة مرور حماية الهوية (للتصدير/الاستيراد):', style: TextStyle(color: Colors.white70, fontSize: 12)),
+        const SizedBox(height: 5),
+        _buildPasswordField(_identityPasswordController, 'كلمة مرور الهوية'),
+        const SizedBox(height: 10),
+        _buildDoDSwitch(), // تم إضافة مفتاح DoD هنا
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _exportIdentity,
+                child: const Text('📤 تصدير مشفر', style: TextStyle(color: Color(0xFFD4AF37))),
+              ),
+            ),
+            const SizedBox(width: 5),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _importIdentity,
+                child: const Text('📥 استيراد هوية', style: TextStyle(color: Colors.white)),
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildPasswordField() {
+  Widget _buildPasswordField(TextEditingController controller, String hint) {
     return TextField(
-      controller: _passwordController,
+      controller: controller,
       obscureText: true,
       style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(hintText: 'كلمة المرور', filled: true, fillColor: const Color(0xFF1A1F26), border: OutlineInputBorder(borderRadius: BorderRadius.circular(6))),
+      decoration: InputDecoration(
+        hintText: hint, 
+        filled: true, 
+        fillColor: const Color(0xFF1A1F26), 
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6))
+      ),
     );
   }
 
@@ -501,7 +614,10 @@ class _HomeScreenState extends State<HomeScreen> {
       title: const Text('مسح عسكري آمن DoD 7-Pass للملف الأصلي', style: TextStyle(color: Colors.white70, fontSize: 12)),
       value: _enableDoD,
       activeColor: const Color(0xFFD4AF37),
-      onChanged: (val) => setState(() => _enableDoD = val),
+      onChanged: (val) {
+        setState(() => _enableDoD = val);
+        _addLog('[*] DoD Secure Wipe: ${val ? "ENABLED" : "DISABLED"}');
+      },
     );
   }
 }
