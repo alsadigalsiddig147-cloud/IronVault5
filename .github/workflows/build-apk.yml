@@ -28,7 +28,10 @@ jobs:
 
     - name: Prepare Clean Android & Flutter Project
       run: |
-        # توليد هيكل أندرويد متوافق ونظيف
+        # حذف مجلد أندرويد القديم المسبب للمشاكل إن وجد
+        rm -rf android
+        
+        # إنشاء هيكل فلوتار وأندرويد متكامل ونظيف حديث
         flutter create . --org com.ironvault --project-name iron_vault --platforms android
         
         # ضبط الحد الأدنى لإصدار SDK في ملفات Gradle ليتوافق مع الحزم المتقدمة
